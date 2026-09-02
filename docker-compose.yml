@@ -40,11 +40,18 @@ services:
     ports:
       - '3333:3333'
 
-  # O frontend (Vite/PWA) roda melhor fora deste compose durante o
-  # desenvolvimento (npm run dev). Para produção, veja o README — um build
-  # estático servido pelo próprio Caddy/Nginx que já protege sua VPS é o
-  # caminho mais simples; um serviço "frontend" pode ser adicionado aqui
-  # depois se preferir empacotar tudo via Docker.
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '8080:80'
+    # nginx.conf faz proxy de /api/ pro serviço "backend" acima — front e
+    # API ficam na mesma origem, sem precisar mexer em CORS_ORIGIN pra
+    # produção. Pra desenvolver com hot-reload, rode o front fora do Docker
+    # (veja o README) — este serviço aqui é só pra produção/build estático.
 
 volumes:
   postgres_data:

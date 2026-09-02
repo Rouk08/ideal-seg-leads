@@ -4,19 +4,19 @@ App web (PWA) mobile-first para vendedores externos cadastrarem clientes
 prospectados em campo, mesmo offline, com isolamento de dados por vendedor.
 
 > **Status**: em construção, por etapas. Esta versão do README cobre o que já
-> existe até agora: **schema do banco + auth + convites + CRUD de cliente**.
-> As demais seções (formulário mobile, offline, dashboard) serão preenchidas
-> conforme as próximas etapas forem implementadas.
+> existe até agora: **schema do banco + auth + convites + CRUD de cliente +
+> formulário mobile do vendedor**. Offline de verdade (fila de sincronização)
+> e o dashboard de supervisor/admin são as próximas etapas.
 
 ## Stack
 
 - Backend: Node + Express + TypeScript, PostgreSQL via Prisma, JWT (access
   curto + refresh token opaco rotativo em cookie httpOnly)
-- Frontend (a partir da próxima etapa): React + Vite, PWA, offline-first com
-  IndexedDB
+- Frontend: React + Vite + TypeScript, PWA (`vite-plugin-pwa`), mobile-first,
+  React Router
 - Sem Redis, sem fila externa — tudo roda em `docker compose` numa VPS simples
 
-## Setup — backend (etapa atual)
+## Setup — backend
 
 ### 1. Variáveis de ambiente
 
@@ -94,6 +94,55 @@ antes de qualquer teste rodar. Se esse arquivo não existir, os testes avisam
 no terminal e caem no `.env` normal — o que apagaria dados do seu banco de
 desenvolvimento, então não pule esse passo.
 
+## Setup — frontend
+
+### Desenvolvimento (hot-reload)
+
+Rode o backend primeiro (seção acima), depois, **num terminal separado**:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Abre em `http://localhost:5173`. O Vite já tem um proxy configurado
+(`vite.config.ts`) mandando tudo que começa com `/api` pro backend em
+`http://localhost:3333` — não precisa de nenhuma variável de ambiente pra
+isso funcionar com a configuração padrão. Se o backend estiver em outro
+endereço, exporte `VITE_API_PROXY_TARGET` antes de rodar `npm run dev`.
+
+Login de teste (criado pelo seed): `vendedor@idealseg.com.br` / `TrocarSenha123!`.
+
+### Produção (via Docker, junto com backend + Postgres)
+
+```bash
+docker compose up -d --build
+```
+
+Isso builda o frontend (Vite build estático) e serve via nginx na porta
+`8080`, com um proxy interno de `/api/` pro serviço `backend` — front e API
+ficam na **mesma origem** em produção, então o cookie httpOnly do refresh
+token funciona sem nenhuma configuração extra de CORS. Acesse
+`http://SEU_SERVIDOR:8080` (ou coloque atrás do Caddy/Nginx que já roda na
+sua VPS, apontando pra essa porta).
+
+### Rodando o frontend separado (build estático, sem o serviço `frontend` do compose)
+
+Se preferir servir o build de outro jeito (outro Nginx, um CDN, etc.):
+
+```bash
+cd frontend
+npm run build   # gera frontend/dist
+```
+
+Sirva `frontend/dist` como estático, com **duas exigências**:
+1. Toda rota desconhecida deve cair em `index.html` (SPA — veja
+   `try_files $uri /index.html;` em `frontend/nginx.conf` como referência).
+2. Tudo que começa com `/api` precisa chegar ao backend (proxy reverso) — o
+   frontend nunca aponta pra uma URL de API fixa, ele sempre chama `/api/...`
+   relativo à própria origem.
+
 ## Fluxo de convite (sem auto-cadastro)
 
 1. ADMIN loga e chama `POST /api/invites` com `{ email, nome?, perfil }`.
@@ -129,6 +178,8 @@ desenvolvimento, então não pule esse passo.
 | GET | `/api/clients/:id/foto` | autenticado, isolado | stream da foto |
 | GET | `/api/external/cnpj/:cnpj` | autenticado | proxy BrasilAPI — preenchimento automático |
 | GET | `/api/external/cep/:cep` | autenticado | proxy BrasilAPI — preenchimento automático |
+| GET | `/api/clients/:clienteId/interacoes` | autenticado, isolado | histórico de interações do cliente |
+| POST | `/api/clients/:clienteId/interacoes` | autenticado, isolado | registra interação — **renova a reserva de carteira** |
 
 ## Decisões de segurança desta etapa
 
@@ -182,12 +233,66 @@ desenvolvimento, então não pule esse passo.
   reaplica o mesmo isolamento por vendedor, em vez de um `express.static`
   público — senão bastaria adivinhar o caminho do arquivo pra furar o
   isolamento.
+- **Interações renovam a reserva de carteira**: `POST /clients/:id/interacoes`
+  atualiza `reservadoAte` na mesma transação que cria a interação — é assim
+  que a regra "sem interação no período, volta pro pool" é cumprida de
+  verdade, sem depender de nenhuma lógica extra no formulário do vendedor.
+
+## Decisões desta etapa (formulário mobile)
+
+- **Access token só em memória** (`shared/api/client.ts`) — nunca em
+  `localStorage`/`sessionStorage`. O refresh token (cookie httpOnly) é quem
+  sobrevive ao reload; no boot da PWA, chamamos `/auth/refresh` pra
+  reidratar a sessão numa tacada só (usuário + novo access token).
+- **Rascunho automático em `localStorage`** (`NewClientWizard/draft.ts`) —
+  salva a cada mudança (debounced) e é recuperado silenciosamente se o
+  vendedor sair da tela no meio do preenchimento. Isto é só sobre não perder
+  o que foi digitado; a fila de sincronização de cadastros pendentes de
+  verdade (múltiplos, com retry, offline) é a próxima etapa.
+- **O `id` do cliente é gerado no navegador** (`crypto.randomUUID()`) assim
+  que o assistente abre, não quando o formulário é enviado — o mesmo `id`
+  seria usado se o envio falhasse e precisasse ser reenviado depois (offline,
+  próxima etapa), tornando o reenvio idempotente por construção.
+- **Validação de CPF/CNPJ/telefone duplicada no frontend** — mesmo algoritmo
+  do backend, para feedback instantâneo sem round-trip. O backend **sempre**
+  revalida; o frontend é só UX, nunca a fonte da verdade.
+- **Anti-duplicidade em tempo real**: assim que o CNPJ/CPF fica válido (dígito
+  verificador OK), o wizard já consulta `check-duplicate` e bloqueia o
+  "Avançar" se já existir — o vendedor nunca preenche o formulário
+  inteiro pra só então descobrir que é duplicado.
+- **Compressão de foto no aparelho** (`browser-image-compression`) antes do
+  upload — importante em campo, onde a conexão costuma ser fraca; se a
+  compressão falhar por algum motivo, envia o arquivo original (o backend
+  ainda valida tamanho/formato).
+- **Produção com front e API na mesma origem**: `frontend/nginx.conf` faz
+  proxy de `/api/` pro serviço `backend` — evita configurar CORS em produção
+  e garante que o cookie httpOnly do refresh token funciona sem fricção.
+
+### Bugs reais encontrados testando o fluxo completo no navegador
+
+- `GET /api/auth/login` e `/refresh` respondiam sem `metaMensal`/
+  `percentualComissao` — só o `/auth/me` tinha sido atualizado pra incluir
+  esses campos, e a Home (que precisa da meta do mês) usa o retorno do
+  login/refresh, não uma chamada extra a `/me`. Corrigido com um helper
+  único (`sanitizeUsuario`) reaproveitado nos três lugares.
+- **`React.StrictMode` + rotação de refresh token**: o efeito de bootstrap
+  da sessão roda duas vezes em desenvolvimento; como `/auth/refresh`
+  rotaciona o token a cada uso, a 2ª chamada usava um cookie já revogado
+  pela 1ª e derrubava a sessão que tinha acabado de funcionar. A correção
+  óbvia (uma ref pra só disparar a requisição uma vez) quebrou de outro
+  jeito: o cleanup sintético do StrictMode entre as duas invocações marcava
+  a ÚNICA requisição real como "cancelada" antes dela responder, travando a
+  tela em "Carregando…" pra sempre. Resolvido removendo o padrão de
+  cancelamento por cleanup neste efeito específico — o `AuthProvider` vive
+  uma vez só pra vida toda do app, então o cenário que esse padrão
+  normalmente evita (setState após desmontagem de verdade) não se aplica
+  aqui.
 
 ## Próximas etapas (ordem combinada)
 
 1. ~~Auth e convites~~ ✅
 2. ~~Migration inicial gerada + revisão do schema aplicado~~ ✅
 3. ~~CRUD de cliente com anti-duplicidade e isolamento por vendedor~~ ✅
-4. Formulário mobile em etapas
+4. ~~Formulário mobile em etapas~~ ✅
 5. Offline (IndexedDB + fila de sincronização)
 6. Dashboard supervisor/admin

@@ -1,0 +1,56 @@
+@import './theme.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  font-size: 16px; /* nunca menor que 16px — evita o iOS dar zoom automático ao focar um campo */
+}
+
+a {
+  color: var(--color-primary);
+}
+
+.app-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+  padding: var(--space-4);
+  padding-bottom: calc(var(--bottom-nav-height) + var(--space-4));
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Desktop (telas de supervisor/admin, próxima etapa) usa mais largura —
+   mobile-first: o desktop é a exceção que alarga o layout, não o padrão. */
+@media (min-width: 900px) {
+  .app-main {
+    max-width: 1000px;
+  }
+}

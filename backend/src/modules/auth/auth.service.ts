@@ -46,11 +46,41 @@ async function issueRefreshToken(usuarioId: string, meta: RequestMeta) {
   return { raw, expiresAt };
 }
 
+interface UsuarioPublico {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: Perfil;
+  metaMensal: unknown;
+  percentualComissao: unknown;
+}
+
 interface AuthResult {
-  usuario: { id: string; nome: string; email: string; perfil: Perfil };
+  usuario: UsuarioPublico;
   accessToken: string;
   refreshToken: string;
   refreshTokenExpiresAt: Date;
+}
+
+// Campos do Usuario seguros para expor ao próprio front (nunca senhaHash).
+// Um helper único aqui evita o que já aconteceu uma vez: adicionar um campo
+// novo (metaMensal) só no /auth/me e esquecer de refletir em login/refresh.
+function sanitizeUsuario(usuario: {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: Perfil;
+  metaMensal: unknown;
+  percentualComissao: unknown;
+}): UsuarioPublico {
+  return {
+    id: usuario.id,
+    nome: usuario.nome,
+    email: usuario.email,
+    perfil: usuario.perfil,
+    metaMensal: usuario.metaMensal,
+    percentualComissao: usuario.percentualComissao,
+  };
 }
 
 export async function login(email: string, senha: string, meta: RequestMeta): Promise<AuthResult> {
@@ -81,7 +111,7 @@ export async function login(email: string, senha: string, meta: RequestMeta): Pr
   });
 
   return {
-    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: usuario.perfil },
+    usuario: sanitizeUsuario(usuario),
     accessToken,
     refreshToken,
     refreshTokenExpiresAt: expiresAt,
@@ -114,12 +144,7 @@ export async function refresh(rawRefreshToken: string, meta: RequestMeta): Promi
   const { raw: refreshToken, expiresAt } = await issueRefreshToken(stored.usuarioId, meta);
 
   return {
-    usuario: {
-      id: stored.usuario.id,
-      nome: stored.usuario.nome,
-      email: stored.usuario.email,
-      perfil: stored.usuario.perfil,
-    },
+    usuario: sanitizeUsuario(stored.usuario),
     accessToken,
     refreshToken,
     refreshTokenExpiresAt: expiresAt,

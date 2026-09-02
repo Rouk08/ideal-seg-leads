@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import * as clientsController from './clients.controller';
+import * as interactionsController from '../interactions/interactions.controller';
 import { requireAuth, requireRole } from '../../middlewares/auth';
 
 export const clientsRouter = Router();
@@ -22,3 +23,8 @@ clientsRouter.patch('/:id/reassign', requireRole('SUPERVISOR', 'ADMIN'), clients
 
 clientsRouter.post('/:id/foto', upload.single('foto'), clientsController.uploadFoto);
 clientsRouter.get('/:id/foto', clientsController.getFoto);
+
+// Interações — sempre aninhadas a um cliente; o isolamento é herdado de lá
+// (interactions.service verifica acesso ao cliente antes de qualquer coisa).
+clientsRouter.get('/:clienteId/interacoes', interactionsController.list);
+clientsRouter.post('/:clienteId/interacoes', interactionsController.create);

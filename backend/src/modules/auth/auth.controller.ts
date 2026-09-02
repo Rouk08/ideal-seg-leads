@@ -49,7 +49,7 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 export const me = asyncHandler(async (req: Request, res: Response) => {
   const usuario = await prisma.usuario.findUnique({
     where: { id: req.user!.id },
-    select: { id: true, nome: true, email: true, perfil: true, ativo: true },
+    select: { id: true, nome: true, email: true, perfil: true, ativo: true, metaMensal: true, percentualComissao: true },
   });
 
   if (!usuario || !usuario.ativo) {
