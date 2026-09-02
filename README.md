@@ -8,6 +8,31 @@ prospectados em campo, mesmo offline, com isolamento de dados por vendedor.
 > formulário mobile do vendedor, offline (IndexedDB + fila de sincronização)
 > e dashboard de supervisor/admin.
 
+## Screenshots
+
+Capturas reais da aplicação rodando (dados do seed) — não mockups.
+
+### Vendedor (mobile)
+
+<table>
+<tr>
+<td><img src="docs/screenshots/login.png" width="260" alt="Tela de login" /><br/><sub>Login</sub></td>
+<td><img src="docs/screenshots/home-vendedor.png" width="260" alt="Home do vendedor" /><br/><sub>Home — meta, cadastros no mês, funil</sub></td>
+<td><img src="docs/screenshots/meus-clientes.png" width="260" alt="Lista de clientes do vendedor" /><br/><sub>Meus clientes</sub></td>
+<td><img src="docs/screenshots/novo-cliente.png" width="260" alt="Formulário de novo cliente" /><br/><sub>Novo cliente — autopreenchimento por CNPJ</sub></td>
+</tr>
+</table>
+
+### Supervisor/Admin (desktop)
+
+<table>
+<tr>
+<td><img src="docs/screenshots/dashboard-admin.png" width="380" alt="Dashboard do supervisor" /><br/><sub>Dashboard — funil consolidado, ranking</sub></td>
+<td><img src="docs/screenshots/clientes-admin.png" width="380" alt="Lista geral de clientes" /><br/><sub>Lista geral — filtros, reatribuição, export CSV</sub></td>
+<td><img src="docs/screenshots/usuarios-admin.png" width="380" alt="Gestão de usuários" /><br/><sub>Gestão de usuários</sub></td>
+</tr>
+</table>
+
 ## Stack
 
 - Backend: Node + Express + TypeScript, PostgreSQL via Prisma, JWT (access
