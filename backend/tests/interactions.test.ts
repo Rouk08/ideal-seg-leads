@@ -135,4 +135,33 @@ describe('interações', () => {
     expect(lista.body.items).toHaveLength(2);
     expect(lista.body.items[0].descricao).toBe('visita presencial'); // mais recente primeiro
   });
+
+  it('reenviar a mesma interação (mesmo id) depois de falha de rede não duplica', async () => {
+    const vendedor = await criarUsuario('Vendedor', 'v@teste.com', Perfil.VENDEDOR);
+    const token = await tokenPara(vendedor.email);
+
+    const criado = await request(app)
+      .post('/api/clients')
+      .set(auth(token))
+      .send({
+        tipoPessoa: TipoPessoa.PJ,
+        razaoSocial: 'Empresa W',
+        cidade: 'Gaspar',
+        servicosInteresse: [],
+        cnpjCpf: gerarCnpjValido('44555666'),
+      });
+    const clienteId = criado.body.id as string;
+    const interacaoId = '33333333-3333-4333-8333-333333333333';
+    const payload = { id: interacaoId, tipo: 'VISITA', descricao: 'visita de apresentação' };
+
+    const primeiro = await request(app).post(`/api/clients/${clienteId}/interacoes`).set(auth(token)).send(payload);
+    expect(primeiro.status).toBe(201);
+
+    const reenvio = await request(app).post(`/api/clients/${clienteId}/interacoes`).set(auth(token)).send(payload);
+    expect(reenvio.status).toBe(201);
+    expect(reenvio.body.id).toBe(interacaoId);
+
+    const total = await prisma.interacao.count({ where: { id: interacaoId } });
+    expect(total).toBe(1);
+  });
 });

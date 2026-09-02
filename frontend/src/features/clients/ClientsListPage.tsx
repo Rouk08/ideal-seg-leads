@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../shared/api/client';
 import { ETAPA_FUNIL_LABEL, type Cliente, type EtapaFunil } from '../../shared/types';
 import { formatDateBR } from '../../shared/format';
 import { TopBar } from '../../shared/components/TopBar';
 import { BottomNav } from '../../shared/components/BottomNav';
 import { SelectField } from '../../shared/components/SelectField';
+import { SyncBanner } from '../../shared/components/SyncBanner';
+import { useSyncQueue } from '../../offline/useSyncQueue';
 
 interface ListaClientesResponse {
   items: Cliente[];
@@ -13,10 +15,16 @@ interface ListaClientesResponse {
 }
 
 export function ClientsListPage() {
+  const location = useLocation();
+  const criadoOffline = Boolean((location.state as { criadoOffline?: boolean } | null)?.criadoOffline);
+
   const [busca, setBusca] = useState('');
   const [etapaFunil, setEtapaFunil] = useState('');
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const { itens: fila } = useSyncQueue();
+
+  const pendentes = fila.filter((i) => i.tipo === 'cliente');
 
   useEffect(() => {
     setCarregando(true);
@@ -28,12 +36,20 @@ export function ClientsListPage() {
     }, 300); // debounce simples pra não disparar uma request a cada tecla
 
     return () => clearTimeout(timer);
-  }, [busca, etapaFunil]);
+  }, [busca, etapaFunil, pendentes.length]); // refaz a busca quando um item da fila termina de sincronizar
 
   return (
     <div className="app-shell">
       <TopBar title="Meus clientes" />
       <main className="app-main">
+        {criadoOffline ? (
+          <div className="alert alert-info">
+            Sem conexão agora — o cadastro foi salvo no aparelho e vai ser enviado automaticamente assim que a
+            internet voltar. Ele aparece abaixo como "Pendente de sincronização".
+          </div>
+        ) : null}
+        <SyncBanner />
+
         <div className="field">
           <label htmlFor="busca">Buscar</label>
           <input
@@ -52,9 +68,24 @@ export function ClientsListPage() {
           onChange={(e) => setEtapaFunil(e.target.value)}
         />
 
+        {pendentes.map((item) => (
+          <div key={item.id} className="card" style={{ opacity: 0.75 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+              <div>
+                <strong>{(item.payload.nomeFantasia as string) || (item.payload.razaoSocial as string)}</strong>
+                <div className="field-hint">{item.payload.cidade as string}</div>
+              </div>
+              <span className="badge">{item.ultimoErro ? '⚠️ Erro' : '⏳ Pendente'}</span>
+            </div>
+            <div className="field-hint" style={{ marginTop: 8 }}>
+              {item.ultimoErro || 'Aguardando conexão para sincronizar…'}
+            </div>
+          </div>
+        ))}
+
         {carregando ? (
           <p>Carregando…</p>
-        ) : clientes.length === 0 ? (
+        ) : clientes.length === 0 && pendentes.length === 0 ? (
           <p className="field-hint">Nenhum cliente encontrado.</p>
         ) : (
           clientes.map((c) => (

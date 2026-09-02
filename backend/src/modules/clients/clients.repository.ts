@@ -77,6 +77,14 @@ export async function findById(user: AuthUser, id: string) {
   });
 }
 
+/** Sem escopo de propósito: usado pela checagem de idempotência de sync —
+ * "esse id já existe?" precisa responder independente de quem pergunta,
+ * pra o service decidir se é o mesmo vendedor reenviando (idempotente) ou
+ * outra coisa. Nunca devolve isso pra fora sem passar pelo service. */
+export async function findByIdUnscoped(id: string) {
+  return prisma.cliente.findUnique({ where: { id } });
+}
+
 /** Sem escopo de propósito: usado só pela checagem de duplicidade, que
  * precisa enxergar cadastros de QUALQUER vendedor — mas o service acima
  * dela nunca deixa passar mais que nome+data pra fora. */

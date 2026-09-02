@@ -54,6 +54,26 @@ export async function create(user: AuthUser, input: CreateClientInput) {
   validateDocOrThrow(cnpjCpf, input.tipoPessoa);
   validatePhonesOrThrow(input);
 
+  // Idempotência de sincronização (regra de negócio #6): o id do cliente é
+  // gerado no aparelho do vendedor ANTES do envio, justamente pra poder
+  // reenviar o mesmo cadastro depois de uma falha de rede sem duplicar —
+  // se a criação já tinha ido pro banco mas a resposta se perdeu (conexão
+  // caiu bem naquela hora), o reenvio com o mesmo id chega aqui e só
+  // devolve o registro existente, sem tentar criar de novo nem barrar como
+  // duplicidade.
+  if (input.id) {
+    const existentePorId = await clientsRepo.findByIdUnscoped(input.id);
+    if (existentePorId) {
+      if (existentePorId.vendedorId !== user.id) {
+        // Praticamente impossível com UUID v4, mas nunca silencie um id
+        // colidindo com o cadastro de outra pessoa.
+        throw new HttpError(409, 'Este cadastro já existe e pertence a outro vendedor.');
+      }
+      const comVendedor = await clientsRepo.findById(user, input.id);
+      return comVendedor!;
+    }
+  }
+
   const duplicado = await checkDuplicate(cnpjCpf);
   if (duplicado.exists) {
     throw new HttpError(409, duplicado.message);

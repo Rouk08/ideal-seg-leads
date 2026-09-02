@@ -4,6 +4,8 @@ import { TopBar } from '../../../shared/components/TopBar';
 import { Stepper } from '../../../shared/components/Stepper';
 import { Button } from '../../../shared/components/Button';
 import { api, ApiError } from '../../../shared/api/client';
+import { isFalhaTransitoria } from '../../../shared/api/isFalhaTransitoria';
+import { enqueueCliente } from '../../../offline/syncQueue';
 import { onlyDigits } from '../../../shared/format';
 import { isValidCpfCnpj } from '../../../shared/validators/cpfCnpj';
 import type { Cliente } from '../../../shared/types';
@@ -39,41 +41,42 @@ export function NewClientWizard() {
   async function cadastrar() {
     setErroEnvio('');
     setEnviando(true);
-    try {
-      const payload = {
-        id: form.id,
-        tipoPessoa: form.tipoPessoa,
-        cnpjCpf: onlyDigits(form.cnpjCpf),
-        razaoSocial: form.razaoSocial || undefined,
-        nomeFantasia: form.nomeFantasia || undefined,
-        inscricaoEstadual: form.inscricaoEstadual || undefined,
-        porte: form.porte || undefined,
-        cep: form.cep || undefined,
-        logradouro: form.logradouro || undefined,
-        numero: form.numero || undefined,
-        complemento: form.complemento || undefined,
-        bairro: form.bairro || undefined,
-        cidade: form.cidade || undefined,
-        uf: form.uf || undefined,
-        nomeContato: form.nomeContato || undefined,
-        cargo: form.cargo || undefined,
-        telefone: form.telefone || undefined,
-        whatsapp: form.whatsapp || undefined,
-        email: form.email || undefined,
-        servicosInteresse: form.servicosInteresse,
-        qtdPostos: form.qtdPostos ? Number(form.qtdPostos) : undefined,
-        escala: form.escala || undefined,
-        escalaOutraDescricao: form.escalaOutraDescricao || undefined,
-        turno: form.turno || undefined,
-        concorrenteAtual: form.concorrenteAtual || undefined,
-        valorEstimadoMensal: form.valorEstimadoMensal ? Number(form.valorEstimadoMensal) : undefined,
-        previsaoDecisao: form.previsaoDecisao || undefined,
-        latitude: form.latitude ?? undefined,
-        longitude: form.longitude ?? undefined,
-        observacoes: form.observacoes || undefined,
-        consentimentoLgpd: form.consentimentoLgpd,
-      };
 
+    const payload = {
+      id: form.id,
+      tipoPessoa: form.tipoPessoa,
+      cnpjCpf: onlyDigits(form.cnpjCpf),
+      razaoSocial: form.razaoSocial || undefined,
+      nomeFantasia: form.nomeFantasia || undefined,
+      inscricaoEstadual: form.inscricaoEstadual || undefined,
+      porte: form.porte || undefined,
+      cep: form.cep || undefined,
+      logradouro: form.logradouro || undefined,
+      numero: form.numero || undefined,
+      complemento: form.complemento || undefined,
+      bairro: form.bairro || undefined,
+      cidade: form.cidade || undefined,
+      uf: form.uf || undefined,
+      nomeContato: form.nomeContato || undefined,
+      cargo: form.cargo || undefined,
+      telefone: form.telefone || undefined,
+      whatsapp: form.whatsapp || undefined,
+      email: form.email || undefined,
+      servicosInteresse: form.servicosInteresse,
+      qtdPostos: form.qtdPostos ? Number(form.qtdPostos) : undefined,
+      escala: form.escala || undefined,
+      escalaOutraDescricao: form.escalaOutraDescricao || undefined,
+      turno: form.turno || undefined,
+      concorrenteAtual: form.concorrenteAtual || undefined,
+      valorEstimadoMensal: form.valorEstimadoMensal ? Number(form.valorEstimadoMensal) : undefined,
+      previsaoDecisao: form.previsaoDecisao || undefined,
+      latitude: form.latitude ?? undefined,
+      longitude: form.longitude ?? undefined,
+      observacoes: form.observacoes || undefined,
+      consentimentoLgpd: form.consentimentoLgpd,
+    };
+
+    try {
       const cliente = await api.post<Cliente>('/clients', payload);
 
       if (foto) {
@@ -90,7 +93,19 @@ export function NewClientWizard() {
       limparRascunho();
       navigate(`/clientes/${cliente.id}`, { state: { criado: true } });
     } catch (err) {
-      setErroEnvio(err instanceof ApiError ? err.message : 'Não foi possível cadastrar. Verifique sua conexão e tente novamente.');
+      if (isFalhaTransitoria(err)) {
+        // Sem rede, backend fora do ar, ou proxy sem alcançar o serviço.
+        // Regra de negócio #6: o cadastro completo funciona sem conexão —
+        // guarda na fila (com o mesmo id já gerado, garantindo idempotência
+        // quando sincronizar depois) e segue o fluxo como se tivesse dado certo.
+        await enqueueCliente(payload, foto);
+        limparRascunho();
+        navigate('/clientes', { state: { criadoOffline: true } });
+      } else {
+        // o servidor respondeu de verdade com um erro do vendedor (validação,
+        // duplicidade etc.) — não é "tente depois", precisa ser corrigido agora.
+        setErroEnvio(err instanceof ApiError ? err.message : 'Não foi possível cadastrar.');
+      }
     } finally {
       setEnviando(false);
     }

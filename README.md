@@ -5,8 +5,8 @@ prospectados em campo, mesmo offline, com isolamento de dados por vendedor.
 
 > **Status**: em construção, por etapas. Esta versão do README cobre o que já
 > existe até agora: **schema do banco + auth + convites + CRUD de cliente +
-> formulário mobile do vendedor**. Offline de verdade (fila de sincronização)
-> e o dashboard de supervisor/admin são as próximas etapas.
+> formulário mobile do vendedor + offline (IndexedDB + fila de
+> sincronização)**. O dashboard de supervisor/admin é a próxima etapa.
 
 ## Stack
 
@@ -142,6 +142,23 @@ Sirva `frontend/dist` como estático, com **duas exigências**:
 2. Tudo que começa com `/api` precisa chegar ao backend (proxy reverso) — o
    frontend nunca aponta pra uma URL de API fixa, ele sempre chama `/api/...`
    relativo à própria origem.
+
+### Testes
+
+```bash
+cd frontend
+npm test
+```
+
+Cobrem a lógica da fila offline (`offline/syncQueue.ts`) contra um
+IndexedDB de verdade — só que via `fake-indexeddb` (polyfill em Node, sem
+precisar de um browser) em vez de um IndexedDB de browser real. A API é
+mockada de propósito: o que esses testes garantem é a lógica da fila
+(idempotência do lado do client, backoff, nunca descartar um item sozinho),
+não uma chamada de rede — isso já é coberto pelos testes de integração do
+backend (`backend/tests/`) e pela verificação manual ponta a ponta
+(derrubar o container do backend de verdade e confirmar que o app continua
+funcionando).
 
 ## Fluxo de convite (sem auto-cadastro)
 
@@ -288,11 +305,73 @@ Sirva `frontend/dist` como estático, com **duas exigências**:
   normalmente evita (setState após desmontagem de verdade) não se aplica
   aqui.
 
+## Decisões desta etapa (offline — IndexedDB + fila de sincronização)
+
+- **Idempotência de verdade, não só client-side**: o `id` gerado no
+  aparelho (já existia desde a etapa do formulário) agora é reconhecido
+  pelo **backend** como chave de idempotência — `POST /clients` e
+  `POST /clients/:id/interacoes` com um `id` que já existe (do mesmo
+  vendedor) devolvem o registro existente em vez de tentar criar de novo ou
+  barrar como duplicata. Sem isso, reenviar depois de uma falha de rede
+  "resposta perdida, mas o registro já tinha ido pro banco" duplicaria ou
+  daria erro — o backend nunca confia só no frontend não reenviar duas
+  vezes.
+- **Fila em IndexedDB** (`offline/db.ts`, via `idb`), uma store só
+  (`filaSync`) com um campo `tipo` discriminando cliente/interação — os
+  dois seguem o mesmo ciclo de vida (tenta online, guarda na fila só se
+  falhar por rede, reenvia com backoff). A foto da fachada (Blob) vai
+  guardada junto no mesmo item, já comprimida — IndexedDB aceita Blob
+  nativamente, ao contrário de localStorage.
+- **`enqueue` não tenta enviar sozinho** — só grava e notifica. Quem
+  dispara uma tentativa de verdade é o timer periódico (20s), o evento
+  `online` do browser, ou o botão "Tentar agora". Evita uma corrida entre
+  quem chamou `enqueue` (que acabou de levar uma falha) e uma tentativa
+  imediata que tem baixíssima chance de dar certo.
+- **Backoff exponencial por item** (5s → dobra a cada falha → teto de 5min),
+  guardado em `proximaTentativaEm` no próprio registro — sobrevive a reload
+  da página, não é só um `setTimeout` em memória.
+- **Nunca descarta um item sozinho.** Um erro de validação real (4xx) fica
+  visível na fila com a mensagem do servidor, mas continua lá — perder o
+  cadastro que o vendedor digitou em campo não é uma opção, mesmo que o
+  dado precise de correção manual depois.
+- **Indicador visual** (`SyncBanner`, "X cadastros pendentes") na Home e em
+  Meus Clientes; a tela de Detalhe mostra o mesmo estado só pra interações
+  daquele cliente específico.
+
+### Bugs reais encontrados testando offline de propósito (matando o backend, não simulando)
+
+- **Abrir o app sem conexão chutava pro login**, mesmo pra quem já estava
+  logado — o bootstrap de sessão (`/auth/refresh`) falhava por falta de
+  rede e isso derrubava a sessão inteira, quebrando a regra "o cadastro
+  completo funciona sem rede" logo na porta de entrada. Corrigido com um
+  cache local só do *perfil* do usuário (nunca token) — se o bootstrap
+  falha por rede e existe uma sessão conhecida em cache, o app libera o
+  acesso mesmo sem access token válido (`sessaoDegradada`); qualquer
+  chamada de API de verdade ainda vai falhar/enfileirar normalmente até a
+  conexão voltar.
+- **Matar o backend não produz uma falha de rede "crua"** — o proxy no meio
+  do caminho (Vite em dev, nginx em produção) responde com um 500/502/503
+  de verdade. Se só uma falha de `fetch()` genuína entrasse na fila
+  offline, qualquer instabilidade de backend/proxy (bem mais comum em
+  campo do que ficar 100% sem sinal) mostraria um erro de "dado inválido"
+  pro vendedor em vez de guardar o cadastro. Corrigido com
+  `isFalhaTransitoria()` — um helper único, usado em todo lugar que decide
+  "isso é offline ou é erro de verdade" (o formulário, a nova interação, e
+  o próprio bootstrap de sessão), tratando qualquer 5xx como transitório e
+  só 4xx como erro real. Esse mesmo bug apareceu de novo no bootstrap de
+  sessão depois de já ter sido corrigido no formulário — cada ponto de
+  decisão homogêneo precisou do mesmo tratamento.
+- **`vi.useFakeTimers()` trava os testes quando usado com `fake-indexeddb`**
+  — o polyfill depende de `setTimeout`/microtasks reais pra resolver
+  transações por baixo dos panos; fakear o relógio inteiro (em vez de só
+  `Date.now`) deixa essas transações penduradas pra sempre. Trocado por
+  `vi.spyOn(Date, 'now')`, que não toca nos timers.
+
 ## Próximas etapas (ordem combinada)
 
 1. ~~Auth e convites~~ ✅
 2. ~~Migration inicial gerada + revisão do schema aplicado~~ ✅
 3. ~~CRUD de cliente com anti-duplicidade e isolamento por vendedor~~ ✅
 4. ~~Formulário mobile em etapas~~ ✅
-5. Offline (IndexedDB + fila de sincronização)
+5. ~~Offline (IndexedDB + fila de sincronização)~~ ✅
 6. Dashboard supervisor/admin

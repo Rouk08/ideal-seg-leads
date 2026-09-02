@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { api, ApiError } from '../../shared/api/client';
+import { isFalhaTransitoria } from '../../shared/api/isFalhaTransitoria';
 import {
   ETAPA_FUNIL_LABEL,
   SERVICOS_INTERESSE_LABEL,
@@ -15,6 +16,8 @@ import { TopBar } from '../../shared/components/TopBar';
 import { SelectField } from '../../shared/components/SelectField';
 import { TextAreaField } from '../../shared/components/TextField';
 import { Button } from '../../shared/components/Button';
+import { enqueueInteracao } from '../../offline/syncQueue';
+import { useSyncQueue } from '../../offline/useSyncQueue';
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +34,10 @@ export function ClientDetailPage() {
   const [tipoInteracao, setTipoInteracao] = useState<TipoInteracao>('LIGACAO');
   const [descricaoInteracao, setDescricaoInteracao] = useState('');
   const [enviandoInteracao, setEnviandoInteracao] = useState(false);
+  const [avisoOffline, setAvisoOffline] = useState('');
+
+  const { itens: fila } = useSyncQueue();
+  const interacoesPendentes = fila.filter((i) => i.tipo === 'interacao' && i.clienteId === id);
 
   async function carregar() {
     if (!id) return;
@@ -43,7 +50,16 @@ export function ClientDetailPage() {
       setCliente(c);
       setInteracoes(listaInteracoes.items);
     } catch (err) {
-      setErro(err instanceof ApiError ? err.message : 'Não foi possível carregar este cliente.');
+      // Ver detalhes de um cliente exige o servidor (não há cache offline de
+      // leitura nesta etapa — só a fila de escrita); a mensagem pelo menos
+      // deixa claro que é falta de conexão, não um erro de verdade.
+      setErro(
+        isFalhaTransitoria(err)
+          ? 'Sem conexão — não é possível abrir os detalhes deste cliente agora. Tente novamente quando a internet voltar.'
+          : err instanceof ApiError
+            ? err.message
+            : 'Não foi possível carregar este cliente.',
+      );
     } finally {
       setCarregando(false);
     }
@@ -53,6 +69,13 @@ export function ClientDetailPage() {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Quando uma interação pendente termina de sincronizar (a fila muda),
+  // recarrega pra ela sair da lista "pendente" e entrar no histórico real.
+  useEffect(() => {
+    if (!carregando) carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interacoesPendentes.length]);
 
   async function mudarEtapa(novaEtapa: EtapaFunil) {
     if (!id) return;
@@ -71,12 +94,23 @@ export function ClientDetailPage() {
     e.preventDefault();
     if (!id || !descricaoInteracao.trim()) return;
     setEnviandoInteracao(true);
+    setAvisoOffline('');
+    // id gerado aqui, não no servidor — mesmo princípio do cadastro de
+    // cliente: se a fila offline precisar reenviar depois, o reenvio com
+    // este id é idempotente.
+    const payload = { id: crypto.randomUUID(), tipo: tipoInteracao, descricao: descricaoInteracao };
     try {
-      await api.post(`/clients/${id}/interacoes`, { tipo: tipoInteracao, descricao: descricaoInteracao });
+      await api.post(`/clients/${id}/interacoes`, payload);
       setDescricaoInteracao('');
       await carregar(); // recarrega cliente (reservadoAte renovado) + histórico
     } catch (err) {
-      setErro(err instanceof ApiError ? err.message : 'Não foi possível registrar a interação.');
+      if (isFalhaTransitoria(err)) {
+        await enqueueInteracao(id, payload);
+        setDescricaoInteracao('');
+        setAvisoOffline('Sem conexão — a interação foi salva e será enviada assim que a internet voltar.');
+      } else {
+        setErro(err instanceof ApiError ? err.message : 'Não foi possível registrar a interação.');
+      }
     } finally {
       setEnviandoInteracao(false);
     }
@@ -157,7 +191,19 @@ export function ClientDetailPage() {
         </div>
 
         <h3>Histórico de interações</h3>
-        {interacoes.length === 0 ? (
+        {interacoesPendentes.map((item) => (
+          <div key={item.id} className="card" style={{ opacity: 0.75 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span className="badge">{item.ultimoErro ? '⚠️ Erro' : '⏳ Pendente'}</span>
+              <span className="field-hint">{TIPO_INTERACAO_LABEL[item.payload.tipo as TipoInteracao]}</span>
+            </div>
+            <p style={{ marginBottom: 0 }}>{item.payload.descricao as string}</p>
+            <p className="field-hint" style={{ marginBottom: 0 }}>
+              {item.ultimoErro || 'Aguardando conexão para sincronizar…'}
+            </p>
+          </div>
+        ))}
+        {interacoes.length === 0 && interacoesPendentes.length === 0 ? (
           <p className="field-hint">Nenhuma interação registrada ainda.</p>
         ) : (
           interacoes.map((i) => (
@@ -172,6 +218,7 @@ export function ClientDetailPage() {
         )}
 
         <h3>Nova interação</h3>
+        {avisoOffline ? <div className="alert alert-info">{avisoOffline}</div> : null}
         <form onSubmit={registrarInteracao}>
           <SelectField
             label="Tipo"

@@ -212,3 +212,45 @@ describe('isolamento por vendedor', () => {
     expect(reatribuicao.body.vendedorId).toBe(vendedorB.id);
   });
 });
+
+describe('idempotência de sincronização (fila offline)', () => {
+  it('reenviar o mesmo cadastro com o mesmo id não duplica nem dá erro — devolve o registro existente', async () => {
+    const vendedor = await criarUsuario('Vendedor', 'v@teste.com', Perfil.VENDEDOR);
+    const token = await tokenPara(vendedor.email);
+    const id = '11111111-1111-4111-8111-111111111111';
+    const payload = { ...clienteBase, id, cnpjCpf: gerarCnpjValido('11222333') };
+
+    const primeiro = await request(app).post('/api/clients').set(auth(token)).send(payload);
+    expect(primeiro.status).toBe(201);
+    expect(primeiro.body.id).toBe(id);
+
+    // simula o app reenviando depois de uma falha de rede (resposta perdida,
+    // mas o registro já tinha sido criado no primeiro envio)
+    const reenvio = await request(app).post('/api/clients').set(auth(token)).send(payload);
+    expect(reenvio.status).toBe(201);
+    expect(reenvio.body.id).toBe(id);
+
+    const total = await prisma.cliente.count({ where: { id } });
+    expect(total).toBe(1); // nunca duplicou
+  });
+
+  it('reenviar um id que já existe de outro vendedor é rejeitado, não devolvido como se fosse seu', async () => {
+    const vendedorA = await criarUsuario('Vendedor A', 'a@teste.com', Perfil.VENDEDOR);
+    const vendedorB = await criarUsuario('Vendedor B', 'b@teste.com', Perfil.VENDEDOR);
+    const tokenA = await tokenPara(vendedorA.email);
+    const tokenB = await tokenPara(vendedorB.email);
+    const id = '22222222-2222-4222-8222-222222222222';
+
+    const criado = await request(app)
+      .post('/api/clients')
+      .set(auth(tokenA))
+      .send({ ...clienteBase, id, cnpjCpf: gerarCnpjValido('22333444') });
+    expect(criado.status).toBe(201);
+
+    const tentativaB = await request(app)
+      .post('/api/clients')
+      .set(auth(tokenB))
+      .send({ ...clienteBase, id, cnpjCpf: gerarCnpjValido('33444555') });
+    expect(tentativaB.status).toBe(409);
+  });
+});
