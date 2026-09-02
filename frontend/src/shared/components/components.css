@@ -125,6 +125,8 @@
   padding: 0 var(--space-4);
   background: var(--color-primary);
   color: var(--color-text-inverse);
+  /* acento dourado — elemento recorrente da identidade Ideal Seg */
+  border-bottom: 3px solid var(--color-accent);
 }
 
 .top-bar h1 {
@@ -172,7 +174,7 @@
 }
 
 .bottom-nav a.active {
-  color: var(--color-primary);
+  color: var(--color-accent-dark);
   font-weight: 600;
 }
 
@@ -232,7 +234,7 @@
 .alert-info {
   background: var(--color-primary-light);
   color: var(--color-primary-dark);
-  border: 1px solid #cddcec;
+  border: 1px solid #f0dd8a;
 }
 
 .stepper {
@@ -248,9 +250,12 @@
   background: var(--color-border);
 }
 
-.stepper-dot.done,
-.stepper-dot.current {
+.stepper-dot.done {
   background: var(--color-primary);
+}
+
+.stepper-dot.current {
+  background: var(--color-accent);
 }
 
 .stat-grid {
@@ -297,11 +302,19 @@
   padding: 0 var(--space-5);
   background: var(--color-primary);
   color: var(--color-text-inverse);
+  border-bottom: 3px solid var(--color-accent);
 }
 
 .admin-topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-weight: 700;
   margin-right: auto;
+}
+
+.admin-topbar .brand img {
+  border-radius: 50%;
 }
 
 .admin-topbar nav {

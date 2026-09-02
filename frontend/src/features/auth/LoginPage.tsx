@@ -4,6 +4,7 @@ import { useAuth } from '../../shared/auth/AuthContext';
 import { TextField } from '../../shared/components/TextField';
 import { Button } from '../../shared/components/Button';
 import { ApiError } from '../../shared/api/client';
+import logo from '../../assets/logo.webp';
 
 export function LoginPage() {
   const { login, status } = useAuth();
@@ -36,23 +37,7 @@ export function LoginPage() {
   return (
     <div className="app-main" style={{ paddingTop: '15vh' }}>
       <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-        <div
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: 'var(--radius-lg)',
-            background: 'var(--color-primary)',
-            color: 'var(--color-text-inverse)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 28,
-            fontWeight: 700,
-            margin: '0 auto var(--space-3)',
-          }}
-        >
-          IS
-        </div>
+        <img src={logo} alt="Ideal Seg" width={96} height={96} style={{ margin: '0 auto var(--space-3)', display: 'block' }} />
         <h2 style={{ margin: 0 }}>Ideal Seg</h2>
         <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>Captação de leads</p>
       </div>

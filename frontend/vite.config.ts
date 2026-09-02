@@ -8,22 +8,22 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'],
       manifest: {
         name: 'Ideal Seg — Captação de Leads',
         short_name: 'Ideal Seg Leads',
         description: 'Cadastro de clientes prospectados em campo pelos vendedores da Ideal Seg.',
-        // Paleta provisória — troca centralizada em src/styles/theme.css quando
-        // a identidade visual definitiva (cores + logo) chegar.
-        theme_color: '#0f4c81',
-        background_color: '#ffffff',
+        // Identidade oficial da Ideal Seg: preto/carvão + dourado #F2C200 —
+        // mesma logo já usada no ERP (idealseg.com). Ver src/styles/theme.css.
+        theme_color: '#141414',
+        background_color: '#141414',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

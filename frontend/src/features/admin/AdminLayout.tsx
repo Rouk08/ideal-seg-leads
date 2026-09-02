@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../../shared/auth/AuthContext';
+import logo from '../../assets/logo.webp';
 
 export function AdminLayout() {
   const { usuario, logout } = useAuth();
@@ -7,7 +8,10 @@ export function AdminLayout() {
   return (
     <div className="admin-shell">
       <header className="admin-topbar">
-        <span className="brand">Ideal Seg</span>
+        <span className="brand">
+          <img src={logo} alt="" width={28} height={28} />
+          Ideal Seg
+        </span>
         <nav>
           <NavLink to="/admin" end>
             Dashboard
