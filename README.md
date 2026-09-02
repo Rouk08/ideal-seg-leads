@@ -4,8 +4,8 @@ App web (PWA) mobile-first para vendedores externos cadastrarem clientes
 prospectados em campo, mesmo offline, com isolamento de dados por vendedor.
 
 > **Status**: em construção, por etapas. Esta versão do README cobre o que já
-> existe até agora: **schema do banco + auth + convites**. As demais seções
-> (CRUD de cliente, formulário mobile, offline, dashboard) serão preenchidas
+> existe até agora: **schema do banco + auth + convites + CRUD de cliente**.
+> As demais seções (formulário mobile, offline, dashboard) serão preenchidas
 > conforme as próximas etapas forem implementadas.
 
 ## Stack
@@ -48,10 +48,17 @@ npm run prisma:seed       # cria o usuário ADMIN de bootstrap
 npm run dev                # sobe em http://localhost:3333
 ```
 
-O `prisma:seed` imprime no terminal o e-mail/senha do admin criado — troque a
-senha assim que fizer o primeiro login (a troca de senha pelo próprio usuário
-ainda não tem tela nesta etapa; por ora, gere um novo hash e atualize direto
-no banco, ou aguarde a tela de gestão de usuários).
+O `prisma:seed` cria 3 usuários (um de cada perfil) e 10 clientes fictícios
+de Gaspar/Blumenau, e imprime as credenciais no terminal — troque as senhas
+assim que fizer o primeiro login (a troca de senha pelo próprio usuário ainda
+não tem tela nesta etapa; por ora, gere um novo hash e atualize direto no
+banco, ou aguarde a tela de gestão de usuários).
+
+| Perfil | E-mail | Senha (padrão do seed) |
+|---|---|---|
+| ADMIN | `admin@idealseg.com.br` | `TrocarSenha123!` |
+| SUPERVISOR | `supervisor@idealseg.com.br` | `TrocarSenha123!` |
+| VENDEDOR | `vendedor@idealseg.com.br` | `TrocarSenha123!` |
 
 ### 4. Rodar tudo via Docker (backend + Postgres)
 
@@ -112,6 +119,16 @@ desenvolvimento, então não pule esse passo.
 | DELETE | `/api/invites/:id` | ADMIN | revoga convite pendente |
 | GET | `/api/invites/validate?token=` | público | valida token sem consumir |
 | POST | `/api/invites/accept` | público | consome o token e cria o usuário |
+| GET | `/api/clients/check-duplicate?cnpjCpf=` | autenticado | pré-checagem de duplicidade (só nome+data de quem cadastrou) |
+| POST | `/api/clients` | autenticado | cria cliente (vendedorId sempre = quem está logado) |
+| GET | `/api/clients` | autenticado | lista (isolada por vendedor; supervisor/admin veem tudo) — filtros: `etapaFunil`, `cidade`, `servico`, `vendedorId`, `busca`, `page`, `pageSize` |
+| GET | `/api/clients/:id` | autenticado, isolado | detalhe — 404 (não 403) se não pertence ao vendedor |
+| PATCH | `/api/clients/:id` | autenticado, isolado | edita (não permite trocar `cnpjCpf`) |
+| PATCH | `/api/clients/:id/reassign` | SUPERVISOR/ADMIN | reatribui a carteira, renova a reserva |
+| POST | `/api/clients/:id/foto` | autenticado, isolado | upload da foto da fachada (multipart, campo `foto`) |
+| GET | `/api/clients/:id/foto` | autenticado, isolado | stream da foto |
+| GET | `/api/external/cnpj/:cnpj` | autenticado | proxy BrasilAPI — preenchimento automático |
+| GET | `/api/external/cep/:cep` | autenticado | proxy BrasilAPI — preenchimento automático |
 
 ## Decisões de segurança desta etapa
 
@@ -129,11 +146,48 @@ desenvolvimento, então não pule esse passo.
 - Login não distingue "e-mail não existe" de "senha errada" na mensagem de
   erro, e tem rate limit por IP.
 
+## Decisões desta etapa (CRUD de cliente)
+
+- **Isolamento por vendedor concentrado num único lugar**: toda query de
+  `Cliente` passa por `clients.repository.ts`, que aplica o filtro
+  `vendedorId` automaticamente pra quem é `VENDEDOR` (supervisor/admin
+  enxergam tudo). Nenhum outro módulo consulta `prisma.cliente` diretamente
+  — é assim que se garante que uma rota nova, um relatório ou uma exportação
+  futura não acabam vazando dado de um vendedor pro outro "por esquecimento".
+- Cliente inacessível (não existe OU é de outro vendedor) sempre responde
+  **404**, nunca 403 — um 403 diferenciado revelaria que aquele CNPJ/CPF
+  pertence a alguém, mesmo sem mostrar os dados.
+- **Anti-duplicidade** é uma constraint `UNIQUE` no banco (`cnpjCpf`), com uma
+  checagem amigável antes (`check-duplicate`) que devolve só
+  `{ exists, cadastradoPorNome, dataCadastro }` — testado explicitamente pra
+  garantir que nenhum outro campo do lead alheio vaza nessa resposta.
+- **CPF/CNPJ**: validação real de dígito verificador (`lib/validators/cpfCnpj.ts`),
+  não só formato/tamanho.
+- **BrasilAPI**: proxy no backend (não direto do frontend) — evita CORS e
+  centraliza o tratamento de erro. Timeout de 5s e qualquer falha (rede, API
+  fora do ar, CNPJ/CEP não encontrado) vira **404 limpo**, nunca um 500 nem
+  trava a resposta — o formulário (próxima etapa) cai pro preenchimento
+  manual nesse caso. *Achado ao testar de verdade*: a BrasilAPI bloqueia
+  (403) requisições sem `User-Agent`, que é o que o `fetch` nativo do Node
+  manda por padrão — corrigido enviando um `User-Agent` fixo.
+- **Reserva de carteira**: `reservadoAte` é setado em `agora + diasReservaCarteira`
+  (parâmetro em `Settings`, 60 dias por padrão) na criação e na reatribuição.
+  Um job diário (`jobs/releaseExpiredReservations.ts`, node-cron, 03:00 +
+  uma vez na subida) limpa `reservadoAte` de reservas vencidas — isso **não**
+  tira o cliente do vendedor original, só sinaliza que a exclusividade
+  expirou; só supervisor/admin reatribuem de fato.
+- **Upload de foto**: recebido em memória (multer) e salvo via
+  `lib/storage.ts` — trocar de disco local pra S3 depois é reescrever só essa
+  classe. Servido por uma rota autenticada (`GET /clients/:id/foto`) que
+  reaplica o mesmo isolamento por vendedor, em vez de um `express.static`
+  público — senão bastaria adivinhar o caminho do arquivo pra furar o
+  isolamento.
+
 ## Próximas etapas (ordem combinada)
 
 1. ~~Auth e convites~~ ✅
-2. Migration inicial gerada + revisão do schema aplicado
-3. CRUD de cliente com anti-duplicidade e isolamento por vendedor
+2. ~~Migration inicial gerada + revisão do schema aplicado~~ ✅
+3. ~~CRUD de cliente com anti-duplicidade e isolamento por vendedor~~ ✅
 4. Formulário mobile em etapas
 5. Offline (IndexedDB + fila de sincronização)
 6. Dashboard supervisor/admin

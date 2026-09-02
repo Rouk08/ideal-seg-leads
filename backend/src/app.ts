@@ -6,6 +6,8 @@ import { env } from './config/env';
 import { errorHandler } from './middlewares/errorHandler';
 import { authRouter } from './modules/auth/auth.routes';
 import { invitesRouter } from './modules/invites/invites.routes';
+import { clientsRouter } from './modules/clients/clients.routes';
+import { externalRouter } from './modules/external/external.routes';
 
 export function createApp() {
   const app = express();
@@ -26,9 +28,11 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api/invites', invitesRouter);
+  app.use('/api/clients', clientsRouter);
+  app.use('/api/external', externalRouter);
 
-  // Demais módulos (clients, interactions, sync, dashboard, export, settings,
-  // external) entram aqui nas próximas etapas.
+  // Demais módulos (interactions, sync, dashboard, export, settings) entram
+  // aqui nas próximas etapas.
 
   app.use(errorHandler);
 
