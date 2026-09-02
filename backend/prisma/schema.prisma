@@ -1,0 +1,285 @@
+// ============================================================================
+// Ideal Seg - CRM de captação (leads)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Perfil {
+  VENDEDOR
+  SUPERVISOR
+  ADMIN
+}
+
+enum TipoPessoa {
+  PJ
+  PF
+}
+
+enum ServicoInteresse {
+  PORTARIA_CONTROLE_ACESSO
+  VIGILANCIA_PATRIMONIAL
+  LIMPEZA_HIGIENIZACAO
+  MANUTENCAO_PREDIAL
+  CONSULTORIA_SEGURANCA
+  MONITORAMENTO
+}
+
+enum Escala {
+  ESCALA_12X36
+  ESCALA_44H_SEMANAIS
+  OUTRA
+}
+
+enum Turno {
+  DIURNO
+  NOTURNO
+  H24
+}
+
+enum EtapaFunil {
+  NOVO
+  CONTATO_FEITO
+  VISITA_AGENDADA
+  PROPOSTA_ENVIADA
+  NEGOCIACAO
+  GANHO
+  PERDIDO
+}
+
+enum TipoInteracao {
+  LIGACAO
+  VISITA
+  WHATSAPP
+  EMAIL
+}
+
+enum InviteStatus {
+  PENDENTE
+  USADO
+  EXPIRADO
+  REVOGADO
+}
+
+// ---------------------------------------------------------------------------
+// Usuário
+// ---------------------------------------------------------------------------
+
+model Usuario {
+  id                 String   @id @default(uuid())
+  nome               String
+  email              String   @unique
+  senhaHash          String
+  perfil             Perfil
+  ativo              Boolean  @default(true)
+
+  // Comissão/meta — campos criados desde já; v1 não usa em telas de cálculo
+  metaMensal         Decimal? @db.Decimal(12, 2)
+  percentualComissao Decimal? @db.Decimal(5, 2)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  clientes           Cliente[]      @relation("VendedorClientes")
+  interacoes         Interacao[]
+  convitesGerados    Invite[]       @relation("ConvitesGeradosPor")
+  conviteOrigem      Invite?        @relation("UsuarioDoConvite")
+  refreshTokens      RefreshToken[]
+  auditLogs          AuditLog[]
+
+  @@map("usuarios")
+}
+
+// ---------------------------------------------------------------------------
+// Convite (onboarding sem auto-cadastro)
+// ---------------------------------------------------------------------------
+
+model Invite {
+  id              String       @id @default(uuid())
+  email           String
+  nome            String?
+  perfil          Perfil       @default(VENDEDOR)
+
+  // Nunca armazenamos o token cru — só o hash. O token cru só existe no link enviado.
+  tokenHash       String       @unique
+  status          InviteStatus @default(PENDENTE)
+  expiresAt       DateTime
+  usedAt          DateTime?
+
+  criadoPorId     String
+  criadoPor       Usuario      @relation("ConvitesGeradosPor", fields: [criadoPorId], references: [id])
+
+  usuarioGeradoId String?      @unique
+  usuarioGerado   Usuario?     @relation("UsuarioDoConvite", fields: [usuarioGeradoId], references: [id])
+
+  createdAt       DateTime     @default(now())
+
+  @@index([email])
+  @@map("invites")
+}
+
+// ---------------------------------------------------------------------------
+// Refresh token (sessão) — permite revogação/rotação
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  usuarioId  String
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id])
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  @@index([usuarioId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Cliente / Lead
+// ---------------------------------------------------------------------------
+
+model Cliente {
+  // O id É o UUID gerado no dispositivo do vendedor (inclusive offline).
+  // O backend faz upsert por id no /sync, o que torna a sincronização
+  // idempotente sem precisar de um campo separado de correlação.
+  id                   String             @id @default(uuid())
+
+  // Identificação
+  tipoPessoa           TipoPessoa
+  cnpjCpf              String             @unique // dígito verificador validado na camada de serviço
+  razaoSocial          String?
+  nomeFantasia         String?
+  inscricaoEstadual    String?
+  porte                String?            // texto livre (auto-preenchido pela BrasilAPI, sem enum fixo)
+
+  // Endereço
+  cep                  String?
+  logradouro           String?
+  numero               String?
+  complemento          String?
+  bairro               String?
+  cidade               String?
+  uf                   String?
+
+  // Contato
+  nomeContato          String?
+  cargo                String?
+  telefone             String?
+  whatsapp             String?
+  email                String?
+
+  // Qualificação
+  servicosInteresse    ServicoInteresse[]
+  qtdPostos            Int?
+  escala               Escala?
+  escalaOutraDescricao String?            // detalhe quando escala = OUTRA
+  turno                Turno?
+  concorrenteAtual     String?
+  valorEstimadoMensal  Decimal?           @db.Decimal(12, 2)
+  previsaoDecisao      DateTime?
+
+  // Comercial / funil (campos criados desde já; v1 não usa reatribuição visual completa)
+  etapaFunil           EtapaFunil         @default(NOVO)
+  motivoPerda          String?
+  vendedorId           String
+  vendedor             Usuario            @relation("VendedorClientes", fields: [vendedorId], references: [id])
+  dataCadastro         DateTime           @default(now())
+
+  // Reserva de carteira (regra de negócio #2)
+  reservadoAte         DateTime?
+
+  // Evidências
+  latitude             Decimal?           @db.Decimal(10, 7)
+  longitude            Decimal?           @db.Decimal(10, 7)
+  fotoFachadaPath      String?            // caminho abstraído — ver lib/storage.ts
+
+  observacoes          String?
+
+  // LGPD
+  consentimentoLgpd    Boolean            @default(false)
+  dataConsentimento    DateTime?
+
+  syncedAt             DateTime?          // quando este registro chegou ao servidor (nulo se criado direto online)
+
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  interacoes           Interacao[]
+
+  @@index([vendedorId])
+  @@index([etapaFunil])
+  @@index([cidade])
+  @@index([reservadoAte])
+  @@map("clientes")
+}
+
+// ---------------------------------------------------------------------------
+// Interação
+// ---------------------------------------------------------------------------
+
+model Interacao {
+  id               String        @id @default(uuid()) // também gerado no device, mesma lógica de idempotência
+
+  clienteId        String
+  cliente          Cliente       @relation(fields: [clienteId], references: [id])
+
+  usuarioId        String
+  usuario          Usuario       @relation(fields: [usuarioId], references: [id])
+
+  tipo             TipoInteracao
+  descricao        String
+  data             DateTime      @default(now())
+  proximoPasso     String?
+  dataProximoPasso DateTime?
+
+  syncedAt         DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@index([clienteId])
+  @@map("interacoes")
+}
+
+// ---------------------------------------------------------------------------
+// Auditoria
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  usuarioId  String?
+  usuario    Usuario? @relation(fields: [usuarioId], references: [id])
+  acao       String   // ex.: "cliente.create", "cliente.reatribuir", "usuario.desativar"
+  entidade   String   // ex.: "Cliente"
+  entidadeId String?
+  antes      Json?
+  depois     Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Parâmetros do sistema
+// ---------------------------------------------------------------------------
+
+model Settings {
+  id                  String   @id @default("default")
+  diasReservaCarteira Int      @default(60)
+  updatedAt           DateTime @updatedAt
+
+  @@map("settings")
+}

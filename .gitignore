@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+node_modules/
+dist/
+build/
+
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+frontend/dist/
+frontend/.vite/
+
+*.log
+.DS_Store
