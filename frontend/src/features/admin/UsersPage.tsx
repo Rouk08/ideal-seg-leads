@@ -1,17 +1,59 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../../shared/api/client';
 import { useAuth } from '../../shared/auth/AuthContext';
-import { INVITE_STATUS_LABEL, type Invite, type Perfil, type UsuarioAdmin } from '../../shared/types';
-import { formatCurrencyBRL, formatDateBR } from '../../shared/format';
+import type { Perfil, UsuarioAdmin } from '../../shared/types';
+import { formatCurrencyBRL } from '../../shared/format';
 import { TextField } from '../../shared/components/TextField';
 import { SelectField } from '../../shared/components/SelectField';
 import { Button } from '../../shared/components/Button';
+
+function ResetPasswordForm({ usuarioId, onFeito }: { usuarioId: string; onFeito: () => void }) {
+  const [senha, setSenha] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  async function salvar(e: FormEvent) {
+    e.preventDefault();
+    setErro('');
+    setSalvando(true);
+    try {
+      await api.post(`/users/${usuarioId}/redefinir-senha`, { senha });
+      setSenha('');
+      onFeito();
+    } catch (err) {
+      setErro(err instanceof ApiError ? err.message : 'Não foi possível redefinir a senha.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={salvar} style={{ display: 'flex', gap: 6, alignItems: 'start' }}>
+      <div>
+        <input
+          type="password"
+          required
+          minLength={8}
+          placeholder="Nova senha"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+          style={{ minHeight: 32, padding: '2px 6px', width: 140 }}
+        />
+        {erro ? <div className="field-error">{erro}</div> : null}
+      </div>
+      <Button type="submit" disabled={salvando} style={{ minHeight: 32, padding: '2px 10px' }}>
+        {salvando ? 'Salvando…' : 'Confirmar'}
+      </Button>
+    </form>
+  );
+}
 
 function EditableUserRow({ usuario, onSalvo }: { usuario: UsuarioAdmin; onSalvo: (u: UsuarioAdmin) => void }) {
   const [perfil, setPerfil] = useState<Perfil>(usuario.perfil);
   const [metaMensal, setMetaMensal] = useState(usuario.metaMensal ?? '');
   const [percentualComissao, setPercentualComissao] = useState(usuario.percentualComissao ?? '');
   const [salvando, setSalvando] = useState(false);
+  const [redefinindo, setRedefinindo] = useState(false);
 
   const alterado =
     perfil !== usuario.perfil ||
@@ -43,81 +85,94 @@ function EditableUserRow({ usuario, onSalvo }: { usuario: UsuarioAdmin; onSalvo:
   }
 
   return (
-    <tr>
-      <td>{usuario.nome}</td>
-      <td>{usuario.email}</td>
-      <td>
-        <select value={perfil} onChange={(e) => setPerfil(e.target.value as Perfil)} style={{ minHeight: 32, padding: '2px 6px' }}>
-          <option value="VENDEDOR">Vendedor</option>
-          <option value="SUPERVISOR">Supervisor</option>
-          <option value="ADMIN">Admin</option>
-        </select>
-      </td>
-      <td>
-        <input
-          type="number"
-          min={0}
-          step="0.01"
-          value={metaMensal}
-          onChange={(e) => setMetaMensal(e.target.value)}
-          style={{ width: 100, minHeight: 32, padding: '2px 6px' }}
-        />
-      </td>
-      <td>
-        <input
-          type="number"
-          min={0}
-          max={100}
-          step="0.1"
-          value={percentualComissao}
-          onChange={(e) => setPercentualComissao(e.target.value)}
-          style={{ width: 70, minHeight: 32, padding: '2px 6px' }}
-        />
-        %
-      </td>
-      <td>
-        <span className={`badge ${usuario.ativo ? 'badge-success' : 'badge-danger'}`}>{usuario.ativo ? 'Ativo' : 'Inativo'}</span>
-      </td>
-      <td style={{ display: 'flex', gap: 6 }}>
-        <Button type="button" onClick={salvar} disabled={!alterado || salvando} style={{ minHeight: 32, padding: '2px 10px' }}>
-          Salvar
-        </Button>
-        <Button
-          type="button"
-          variant={usuario.ativo ? 'danger' : 'secondary'}
-          onClick={alternarAtivo}
-          disabled={salvando}
-          style={{ minHeight: 32, padding: '2px 10px' }}
-        >
-          {usuario.ativo ? 'Desativar' : 'Ativar'}
-        </Button>
-      </td>
-    </tr>
+    <>
+      <tr>
+        <td>{usuario.nome}</td>
+        <td>{usuario.email}</td>
+        <td>
+          <select value={perfil} onChange={(e) => setPerfil(e.target.value as Perfil)} style={{ minHeight: 32, padding: '2px 6px' }}>
+            <option value="VENDEDOR">Vendedor</option>
+            <option value="SUPERVISOR">Supervisor</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+        </td>
+        <td>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={metaMensal}
+            onChange={(e) => setMetaMensal(e.target.value)}
+            style={{ width: 100, minHeight: 32, padding: '2px 6px' }}
+          />
+        </td>
+        <td>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step="0.1"
+            value={percentualComissao}
+            onChange={(e) => setPercentualComissao(e.target.value)}
+            style={{ width: 70, minHeight: 32, padding: '2px 6px' }}
+          />
+          %
+        </td>
+        <td>
+          <span className={`badge ${usuario.ativo ? 'badge-success' : 'badge-danger'}`}>{usuario.ativo ? 'Ativo' : 'Inativo'}</span>
+        </td>
+        <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <Button type="button" onClick={salvar} disabled={!alterado || salvando} style={{ minHeight: 32, padding: '2px 10px' }}>
+            Salvar
+          </Button>
+          <Button
+            type="button"
+            variant={usuario.ativo ? 'danger' : 'secondary'}
+            onClick={alternarAtivo}
+            disabled={salvando}
+            style={{ minHeight: 32, padding: '2px 10px' }}
+          >
+            {usuario.ativo ? 'Desativar' : 'Ativar'}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setRedefinindo((v) => !v)}
+            style={{ minHeight: 32, padding: '2px 10px' }}
+          >
+            {redefinindo ? 'Cancelar' : 'Redefinir senha'}
+          </Button>
+        </td>
+      </tr>
+      {redefinindo ? (
+        <tr>
+          <td colSpan={7} style={{ background: 'var(--color-primary-light)' }}>
+            <ResetPasswordForm usuarioId={usuario.id} onFeito={() => setRedefinindo(false)} />
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
 export function UsersPage() {
   const { usuario: eu } = useAuth();
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
-  const [invites, setInvites] = useState<Invite[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  const [emailConvite, setEmailConvite] = useState('');
-  const [nomeConvite, setNomeConvite] = useState('');
-  const [perfilConvite, setPerfilConvite] = useState<'VENDEDOR' | 'SUPERVISOR'>('VENDEDOR');
-  const [linkGerado, setLinkGerado] = useState('');
-  const [erroConvite, setErroConvite] = useState('');
-  const [enviandoConvite, setEnviandoConvite] = useState(false);
+  const [nomeNovo, setNomeNovo] = useState('');
+  const [emailNovo, setEmailNovo] = useState('');
+  const [senhaNovo, setSenhaNovo] = useState('');
+  const [perfilNovo, setPerfilNovo] = useState<'VENDEDOR' | 'SUPERVISOR'>('VENDEDOR');
+  const [erroNovo, setErroNovo] = useState('');
+  const [sucessoNovo, setSucessoNovo] = useState('');
+  const [criandoNovo, setCriandoNovo] = useState(false);
 
   async function carregar() {
     setCarregando(true);
     try {
-      const [resUsuarios, resInvites] = await Promise.all([
-        api.get<{ usuarios: UsuarioAdmin[] }>('/users'),
-        eu?.perfil === 'ADMIN' ? api.get<{ invites: Invite[] }>('/invites') : Promise.resolve({ invites: [] }),
-      ]);
-      setUsuarios(resUsuarios.usuarios);
-      setInvites(resInvites.invites);
+      const res = await api.get<{ usuarios: UsuarioAdmin[] }>('/users');
+      setUsuarios(res.usuarios);
     } finally {
       setCarregando(false);
     }
@@ -128,31 +183,28 @@ export function UsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function criarConvite(e: FormEvent) {
+  async function criarUsuario(e: FormEvent) {
     e.preventDefault();
-    setErroConvite('');
-    setLinkGerado('');
-    setEnviandoConvite(true);
+    setErroNovo('');
+    setSucessoNovo('');
+    setCriandoNovo(true);
     try {
-      const res = await api.post<{ link: string }>('/invites', {
-        email: emailConvite,
-        nome: nomeConvite || undefined,
-        perfil: perfilConvite,
+      const criado = await api.post<UsuarioAdmin>('/users', {
+        nome: nomeNovo,
+        email: emailNovo,
+        senha: senhaNovo,
+        perfil: perfilNovo,
       });
-      setLinkGerado(res.link);
-      setEmailConvite('');
-      setNomeConvite('');
+      setSucessoNovo(`Colaborador ${criado.nome} criado. Repasse o usuário (${criado.email}) e a senha a ele.`);
+      setNomeNovo('');
+      setEmailNovo('');
+      setSenhaNovo('');
       await carregar();
     } catch (err) {
-      setErroConvite(err instanceof ApiError ? err.message : 'Não foi possível gerar o convite.');
+      setErroNovo(err instanceof ApiError ? err.message : 'Não foi possível criar o colaborador.');
     } finally {
-      setEnviandoConvite(false);
+      setCriandoNovo(false);
     }
-  }
-
-  async function revogarConvite(id: string) {
-    await api.del(`/invites/${id}`);
-    await carregar();
   }
 
   const souAdmin = eu?.perfil === 'ADMIN';
@@ -206,82 +258,38 @@ export function UsersPage() {
 
       {souAdmin ? (
         <>
-          <h2>Convites</h2>
-          <form onSubmit={criarConvite} className="inline-form" style={{ marginBottom: 'var(--space-4)' }}>
-            <TextField label="E-mail" type="email" required value={emailConvite} onChange={(e) => setEmailConvite(e.target.value)} />
-            <TextField label="Nome (opcional)" value={nomeConvite} onChange={(e) => setNomeConvite(e.target.value)} />
+          <h2>Novo colaborador</h2>
+          <p className="field-hint" style={{ marginTop: -8, marginBottom: 'var(--space-3)' }}>
+            Defina um usuário (e-mail) e uma senha para o colaborador acessar direto — sem convite.
+          </p>
+          <form onSubmit={criarUsuario} className="inline-form" style={{ marginBottom: 'var(--space-4)' }}>
+            <TextField label="Nome" required value={nomeNovo} onChange={(e) => setNomeNovo(e.target.value)} />
+            <TextField label="E-mail (usuário)" type="email" required value={emailNovo} onChange={(e) => setEmailNovo(e.target.value)} />
+            <TextField
+              label="Senha"
+              type="password"
+              required
+              minLength={8}
+              hint="mín. 8 caracteres"
+              value={senhaNovo}
+              onChange={(e) => setSenhaNovo(e.target.value)}
+            />
             <SelectField
               label="Perfil"
               options={[
                 { value: 'VENDEDOR', label: 'Vendedor' },
                 { value: 'SUPERVISOR', label: 'Supervisor' },
               ]}
-              value={perfilConvite}
-              onChange={(e) => setPerfilConvite(e.target.value as 'VENDEDOR' | 'SUPERVISOR')}
+              value={perfilNovo}
+              onChange={(e) => setPerfilNovo(e.target.value as 'VENDEDOR' | 'SUPERVISOR')}
             />
-            <Button type="submit" disabled={enviandoConvite}>
-              {enviandoConvite ? 'Gerando…' : 'Gerar convite'}
+            <Button type="submit" disabled={criandoNovo}>
+              {criandoNovo ? 'Criando…' : 'Criar colaborador'}
             </Button>
           </form>
 
-          {erroConvite ? <div className="alert alert-danger">{erroConvite}</div> : null}
-          {linkGerado ? (
-            <div className="alert alert-success">
-              Convite gerado! Envie este link ao vendedor:
-              <br />
-              <code style={{ wordBreak: 'break-all' }}>{linkGerado}</code>{' '}
-              <Button type="button" variant="ghost" style={{ minHeight: 'auto', padding: '2px 8px' }} onClick={() => navigator.clipboard.writeText(linkGerado)}>
-                Copiar
-              </Button>
-            </div>
-          ) : null}
-
-          <div className="data-table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>E-mail</th>
-                  <th>Perfil</th>
-                  <th>Status</th>
-                  <th>Expira em</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invites.map((i) => (
-                  <tr key={i.id}>
-                    <td>{i.email}</td>
-                    <td>{i.perfil}</td>
-                    <td>
-                      <span className={`badge ${i.status === 'USADO' ? 'badge-success' : i.status === 'PENDENTE' ? '' : 'badge-danger'}`}>
-                        {INVITE_STATUS_LABEL[i.status]}
-                      </span>
-                    </td>
-                    <td>{formatDateBR(i.expiresAt)}</td>
-                    <td>
-                      {i.status === 'PENDENTE' ? (
-                        <Button
-                          type="button"
-                          variant="danger"
-                          onClick={() => revogarConvite(i.id)}
-                          style={{ minHeight: 32, padding: '2px 10px' }}
-                        >
-                          Revogar
-                        </Button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-                {invites.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="field-hint">
-                      Nenhum convite gerado ainda.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+          {erroNovo ? <div className="alert alert-danger">{erroNovo}</div> : null}
+          {sucessoNovo ? <div className="alert alert-success">{sucessoNovo}</div> : null}
         </>
       ) : null}
     </div>

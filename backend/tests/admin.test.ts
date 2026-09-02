@@ -118,6 +118,71 @@ describe('gestão de usuários', () => {
     expect(res.body.metaMensal).toBe('20000');
     expect(res.body.percentualComissao).toBe('5');
   });
+
+  it('admin cria um colaborador direto com usuário e senha, sem convite, e ele já loga', async () => {
+    const admin = await criarUsuario('Admin', 'admin@teste.com', Perfil.ADMIN);
+    const token = await tokenPara(admin.email);
+
+    const criar = await request(app)
+      .post('/api/users')
+      .set(auth(token))
+      .send({ nome: 'Novo Vendedor', email: 'novo@teste.com', senha: 'SenhaForte123', perfil: 'VENDEDOR' });
+
+    expect(criar.status).toBe(201);
+    expect(criar.body.email).toBe('novo@teste.com');
+    expect(criar.body.ativo).toBe(true);
+    // nunca deve vazar o hash da senha na resposta
+    expect(criar.body.senhaHash).toBeUndefined();
+
+    const login = await request(app).post('/api/auth/login').send({ email: 'novo@teste.com', senha: 'SenhaForte123' });
+    expect(login.status).toBe(200);
+  });
+
+  it('não permite criar dois usuários com o mesmo e-mail', async () => {
+    const admin = await criarUsuario('Admin', 'admin@teste.com', Perfil.ADMIN);
+    await criarUsuario('Existente', 'existente@teste.com', Perfil.VENDEDOR);
+    const token = await tokenPara(admin.email);
+
+    const res = await request(app)
+      .post('/api/users')
+      .set(auth(token))
+      .send({ nome: 'Duplicado', email: 'existente@teste.com', senha: 'SenhaForte123' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('vendedor e supervisor não podem criar usuários (só ADMIN)', async () => {
+    const vendedor = await criarUsuario('Vendedor', 'v@teste.com', Perfil.VENDEDOR);
+    const supervisor = await criarUsuario('Sup', 'sup@teste.com', Perfil.SUPERVISOR);
+    const tokenVendedor = await tokenPara(vendedor.email);
+    const tokenSupervisor = await tokenPara(supervisor.email);
+
+    for (const token of [tokenVendedor, tokenSupervisor]) {
+      const res = await request(app)
+        .post('/api/users')
+        .set(auth(token))
+        .send({ nome: 'X', email: `x-${token.slice(0, 5)}@teste.com`, senha: 'SenhaForte123' });
+      expect(res.status).toBe(403);
+    }
+  });
+
+  it('admin redefine a senha de um colaborador direto pelo painel, sem convite', async () => {
+    const admin = await criarUsuario('Admin', 'admin@teste.com', Perfil.ADMIN);
+    const vendedor = await criarUsuario('Vendedor', 'v@teste.com', Perfil.VENDEDOR);
+    const tokenAdmin = await tokenPara(admin.email);
+
+    const redefinir = await request(app)
+      .post(`/api/users/${vendedor.id}/redefinir-senha`)
+      .set(auth(tokenAdmin))
+      .send({ senha: 'NovaSenhaForte456' });
+    expect(redefinir.status).toBe(204);
+
+    const loginSenhaAntiga = await request(app).post('/api/auth/login').send({ email: vendedor.email, senha: 'SenhaForte123' });
+    expect(loginSenhaAntiga.status).toBe(401);
+
+    const loginSenhaNova = await request(app).post('/api/auth/login').send({ email: vendedor.email, senha: 'NovaSenhaForte456' });
+    expect(loginSenhaNova.status).toBe(200);
+  });
 });
 
 describe('parâmetros (settings)', () => {
