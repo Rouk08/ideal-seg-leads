@@ -57,6 +57,11 @@ export const reassign = asyncHandler(async (req: Request, res: Response) => {
   res.json(cliente);
 });
 
+export const encaminharParaOrcamento = asyncHandler(async (req: Request, res: Response) => {
+  const resultado = await clientsService.encaminharParaOrcamento(authUser(req), req.params.id);
+  res.json(resultado);
+});
+
 export const uploadFoto = asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
     throw new HttpError(400, 'Nenhum arquivo enviado');

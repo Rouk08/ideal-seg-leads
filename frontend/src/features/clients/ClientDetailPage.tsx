@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import { api, ApiError } from '../../shared/api/client';
 import { isFalhaTransitoria } from '../../shared/api/isFalhaTransitoria';
+import { useAuth } from '../../shared/auth/AuthContext';
 import {
   ETAPA_FUNIL_LABEL,
   SERVICOS_INTERESSE_LABEL,
@@ -18,11 +19,14 @@ import { TextAreaField } from '../../shared/components/TextField';
 import { Button } from '../../shared/components/Button';
 import { enqueueInteracao } from '../../offline/syncQueue';
 import { useSyncQueue } from '../../offline/useSyncQueue';
+import { ClientEditForm } from './ClientEditForm';
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const criadoAgora = Boolean((location.state as { criado?: boolean } | null)?.criado);
+  const { usuario } = useAuth();
+  const souAdmin = usuario?.perfil === 'ADMIN';
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [interacoes, setInteracoes] = useState<Interacao[]>([]);
@@ -30,6 +34,10 @@ export function ClientDetailPage() {
   const [erro, setErro] = useState('');
 
   const [salvandoEtapa, setSalvandoEtapa] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [encaminhando, setEncaminhando] = useState(false);
+  const [erroEncaminhar, setErroEncaminhar] = useState('');
+  const [orcamentoUrl, setOrcamentoUrl] = useState('');
 
   const [tipoInteracao, setTipoInteracao] = useState<TipoInteracao>('LIGACAO');
   const [descricaoInteracao, setDescricaoInteracao] = useState('');
@@ -87,6 +95,22 @@ export function ClientDetailPage() {
       setErro(err instanceof ApiError ? err.message : 'Não foi possível mudar a etapa.');
     } finally {
       setSalvandoEtapa(false);
+    }
+  }
+
+  async function encaminharParaOrcamento() {
+    if (!id) return;
+    setErroEncaminhar('');
+    setEncaminhando(true);
+    try {
+      const res = await api.post<{ cliente: Cliente; orcamentoUrl: string }>(`/clients/${id}/encaminhar-orcamento`);
+      setCliente(res.cliente);
+      setOrcamentoUrl(res.orcamentoUrl);
+      window.open(res.orcamentoUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setErroEncaminhar(err instanceof ApiError ? err.message : 'Não foi possível encaminhar este cliente para o ERP.');
+    } finally {
+      setEncaminhando(false);
     }
   }
 
@@ -153,6 +177,54 @@ export function ClientDetailPage() {
             {[cliente.logradouro, cliente.numero, cliente.bairro, cliente.cidade, cliente.uf].filter(Boolean).join(', ')}
           </div>
         </div>
+
+        {souAdmin && !editando ? (
+          <Button type="button" variant="secondary" block style={{ marginBottom: 'var(--space-4)' }} onClick={() => setEditando(true)}>
+            ✏️ Editar cadastro
+          </Button>
+        ) : null}
+
+        {souAdmin && editando ? (
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <ClientEditForm
+              cliente={cliente}
+              onCancelar={() => setEditando(false)}
+              onSalvo={(atualizado) => {
+                setCliente(atualizado);
+                setEditando(false);
+              }}
+            />
+          </div>
+        ) : null}
+
+        {souAdmin ? (
+          <div className="card">
+            <h3 style={{ marginTop: 0 }}>Orçamento e contrato</h3>
+            <p className="field-hint">
+              Encaminha este cliente para o ERP (idealseg.com), onde o orçamento e o contrato são montados.
+            </p>
+            {cliente.encaminhadoErpEm ? (
+              <p>✅ Encaminhado em {formatDateTimeBR(cliente.encaminhadoErpEm)}.</p>
+            ) : null}
+            {erroEncaminhar ? <div className="alert alert-danger">{erroEncaminhar}</div> : null}
+            <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+              <Button type="button" onClick={encaminharParaOrcamento} disabled={encaminhando}>
+                {encaminhando ? 'Encaminhando…' : cliente.encaminhadoErpEm ? 'Reencaminhar (dados atualizados)' : 'Encaminhar para orçamento'}
+              </Button>
+              {cliente.encaminhadoErpEm ? (
+                <a
+                  href={orcamentoUrl || 'https://idealseg.com/admin/orcamentos'}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Button type="button" variant="secondary">
+                    Abrir orçamentos no ERP ↗
+                  </Button>
+                </a>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <div className="field">
           <label>Etapa do funil</label>

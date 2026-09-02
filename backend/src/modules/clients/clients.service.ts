@@ -7,6 +7,8 @@ import { HttpError } from '../../middlewares/errorHandler';
 import { recordAudit } from '../../lib/audit';
 import { prisma } from '../../lib/prisma';
 import { defaultStorage } from '../../lib/storage';
+import * as erpClient from '../erp/erp.client';
+import { SERVICOS_INTERESSE_LABEL } from './clients.labels';
 import type { CreateClientInput, UpdateClientInput } from './clients.validators';
 
 function formatDataCadastro(date: Date): string {
@@ -247,6 +249,53 @@ export async function update(user: AuthUser, id: string, input: UpdateClientInpu
   });
 
   return atualizado;
+}
+
+/**
+ * "Encaminhar para orçamento" — só ADMIN chega aqui (garantido na rota).
+ * Cria (1ª vez) ou atualiza (reencaminhamentos seguintes) o cliente
+ * correspondente no ERP, onde o orçamento e o contrato são de fato gerados.
+ * Este CRM não duplica esse fluxo — só entrega o cadastro pronto lá.
+ */
+export async function encaminharParaOrcamento(user: AuthUser, id: string) {
+  const cliente = await get(user, id);
+
+  const endereco = [cliente.logradouro, cliente.numero].filter(Boolean).join(', ');
+  const servicos = cliente.servicosInteresse.length
+    ? `Serviços de interesse: ${cliente.servicosInteresse.map((s) => SERVICOS_INTERESSE_LABEL[s]).join(', ')}.`
+    : '';
+  const valor = cliente.valorEstimadoMensal ? `Valor estimado mensal: R$ ${cliente.valorEstimadoMensal}.` : '';
+  const origem = `Encaminhado do CRM comercial (vendedor: ${cliente.vendedor.nome}).`;
+  const notes = [servicos, valor, cliente.observacoes, origem].filter(Boolean).join(' ');
+
+  const { id: erpClienteId } = await erpClient.upsertCliente(cliente.erpClienteId, {
+    name: cliente.razaoSocial || cliente.nomeFantasia || cliente.cnpjCpf,
+    fantasy_name: cliente.nomeFantasia ?? undefined,
+    document: cliente.cnpjCpf,
+    email: cliente.email ?? undefined,
+    phone: cliente.whatsapp || cliente.telefone || undefined,
+    address: endereco || undefined,
+    neighborhood: cliente.bairro ?? undefined,
+    city: cliente.cidade ?? undefined,
+    state: cliente.uf ?? undefined,
+    zip_code: cliente.cep ?? undefined,
+    notes,
+  });
+
+  const atualizado = await clientsRepo.update(id, {
+    erpClienteId,
+    encaminhadoErpEm: new Date(),
+  });
+
+  await recordAudit({
+    usuarioId: user.id,
+    acao: 'cliente.encaminhar_erp',
+    entidade: 'Cliente',
+    entidadeId: id,
+    depois: { erpClienteId },
+  });
+
+  return { cliente: atualizado, orcamentoUrl: erpClient.montarUrlOrcamento() };
 }
 
 /**

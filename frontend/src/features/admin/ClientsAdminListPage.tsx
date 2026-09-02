@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../shared/api/client';
 import { ETAPA_FUNIL_LABEL, type Cliente, type EtapaFunil, type UsuarioAdmin } from '../../shared/types';
 import { formatDateBR } from '../../shared/format';
@@ -176,7 +177,9 @@ export function ClientsAdminListPage() {
             ) : (
               clientes.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.nomeFantasia || c.razaoSocial}</td>
+                  <td>
+                    <Link to={`/clientes/${c.id}`}>{c.nomeFantasia || c.razaoSocial}</Link>
+                  </td>
                   <td>{c.cidade}</td>
                   <td>
                     <span className="badge">{ETAPA_FUNIL_LABEL[c.etapaFunil]}</span>

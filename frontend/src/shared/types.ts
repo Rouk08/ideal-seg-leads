@@ -114,6 +114,8 @@ export interface Cliente {
   longitude?: string | null;
   fotoFachadaPath?: string | null;
   observacoes?: string | null;
+  erpClienteId?: string | null;
+  encaminhadoErpEm?: string | null;
   consentimentoLgpd: boolean;
   dataConsentimento?: string | null;
 }

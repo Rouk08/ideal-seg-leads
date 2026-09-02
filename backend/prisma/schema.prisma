@@ -208,6 +208,14 @@ model Cliente {
 
   observacoes          String?
 
+  // Encaminhamento pro ERP (idealseg.com) — orçamento/contrato são gerados
+  // lá, não aqui (a Ideal Seg já tem esse fluxo maduro no ERP). Este campo
+  // só guarda o vínculo: id do cliente já criado/atualizado no ERP e quando
+  // foi a última vez que o admin encaminhou. Reencaminhar reaproveita o
+  // mesmo erpClienteId (PUT em vez de POST), nunca cria duplicata no ERP.
+  erpClienteId         String?
+  encaminhadoErpEm     DateTime?
+
   // LGPD
   consentimentoLgpd    Boolean            @default(false)
   dataConsentimento    DateTime?

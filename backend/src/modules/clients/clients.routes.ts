@@ -26,6 +26,9 @@ clientsRouter.patch('/:id', clientsController.update);
 // Só supervisor/admin reatribuem carteira.
 clientsRouter.patch('/:id/reassign', requireRole('SUPERVISOR', 'ADMIN'), clientsController.reassign);
 
+// Só ADMIN encaminha pro ERP (cria/atualiza o cliente lá pra virar orçamento e contrato).
+clientsRouter.post('/:id/encaminhar-orcamento', requireRole('ADMIN'), clientsController.encaminharParaOrcamento);
+
 clientsRouter.post('/:id/foto', upload.single('foto'), clientsController.uploadFoto);
 clientsRouter.get('/:id/foto', clientsController.getFoto);
 

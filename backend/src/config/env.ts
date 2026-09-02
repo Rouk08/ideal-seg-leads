@@ -23,6 +23,16 @@ const envSchema = z.object({
   RATE_LIMIT_LOGIN_WINDOW_MIN: z.coerce.number().default(15),
 
   UPLOADS_DIR: z.string().default('./uploads'),
+
+  // Integração com o ERP (idealseg.com) — "encaminhar para orçamento".
+  // Opcionais de propósito: sem eles configurados, a funcionalidade fica
+  // indisponível com um erro claro em vez de derrubar o app inteiro na
+  // subida (nem todo ambiente — dev, teste, PR de outra feature — precisa
+  // ter essa integração configurada).
+  ERP_API_URL: z.string().optional(), // ex.: https://idealseg.com/api
+  ERP_APP_URL: z.string().optional(), // ex.: https://idealseg.com (usado pra montar o link que o admin abre)
+  ERP_SERVICE_USERNAME: z.string().optional(),
+  ERP_SERVICE_PASSWORD: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
