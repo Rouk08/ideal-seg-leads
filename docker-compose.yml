@@ -35,6 +35,10 @@ services:
       APP_URL: ${APP_URL:-http://localhost:5173}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       UPLOADS_DIR: /app/uploads
+      ERP_API_URL: ${ERP_API_URL:-}
+      ERP_APP_URL: ${ERP_APP_URL:-}
+      ERP_SERVICE_USERNAME: ${ERP_SERVICE_USERNAME:-}
+      ERP_SERVICE_PASSWORD: ${ERP_SERVICE_PASSWORD:-}
     volumes:
       - uploads_data:/app/uploads
     ports:
