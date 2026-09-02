@@ -178,7 +178,7 @@ export function ClientsAdminListPage() {
               clientes.map((c) => (
                 <tr key={c.id}>
                   <td>
-                    <Link to={`/clientes/${c.id}`}>{c.nomeFantasia || c.razaoSocial}</Link>
+                    <Link to={`/admin/clientes/${c.id}`}>{c.nomeFantasia || c.razaoSocial}</Link>
                   </td>
                   <td>{c.cidade}</td>
                   <td>

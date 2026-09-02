@@ -74,6 +74,7 @@ export default function App() {
           >
             <Route index element={<DashboardPage />} />
             <Route path="clientes" element={<ClientsAdminListPage />} />
+            <Route path="clientes/:id" element={<ClientDetailPage />} />
             <Route path="usuarios" element={<UsersPage />} />
             <Route
               path="parametros"

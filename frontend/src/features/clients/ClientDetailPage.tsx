@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { api, ApiError } from '../../shared/api/client';
 import { isFalhaTransitoria } from '../../shared/api/isFalhaTransitoria';
 import { useAuth } from '../../shared/auth/AuthContext';
@@ -21,9 +21,40 @@ import { enqueueInteracao } from '../../offline/syncQueue';
 import { useSyncQueue } from '../../offline/useSyncQueue';
 import { ClientEditForm } from './ClientEditForm';
 
+/**
+ * Chrome da página muda conforme de onde ela é acessada: pelo app mobile do
+ * vendedor (rota "/clientes/:id", com barra preta + botão voltar, sem nav) ou
+ * de dentro do painel desktop do admin/supervisor (rota "/admin/clientes/:id",
+ * já dentro do AdminLayout — que já tem sua própria barra superior). Nesse
+ * segundo caso, empilhar o TopBar mobile por cima ficava estranho (duas
+ * barras pretas, largura/padding de mobile dentro do layout desktop) — daqui
+ * pra baixo só um cabeçalho simples + link "Voltar", no mesmo estilo das
+ * outras telas do admin.
+ */
+function Shell({ embedded, title, children }: { embedded: boolean; title: string; children: ReactNode }) {
+  if (embedded) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+          <Link to="/admin/clientes">← Clientes</Link>
+          <h2 style={{ margin: 0 }}>{title}</h2>
+        </div>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className="app-shell">
+      <TopBar title={title} back />
+      <main className="app-main">{children}</main>
+    </div>
+  );
+}
+
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
+  const embedded = location.pathname.startsWith('/admin');
   const criadoAgora = Boolean((location.state as { criado?: boolean } | null)?.criado);
   const { usuario } = useAuth();
   const souAdmin = usuario?.perfil === 'ADMIN';
@@ -142,32 +173,26 @@ export function ClientDetailPage() {
 
   if (carregando) {
     return (
-      <div className="app-shell">
-        <TopBar title="Cliente" back />
-        <main className="app-main">Carregando…</main>
-      </div>
+      <Shell embedded={embedded} title="Cliente">
+        Carregando…
+      </Shell>
     );
   }
 
   if (!cliente) {
     return (
-      <div className="app-shell">
-        <TopBar title="Cliente" back />
-        <main className="app-main">
-          <div className="alert alert-danger">{erro || 'Cliente não encontrado.'}</div>
-        </main>
-      </div>
+      <Shell embedded={embedded} title="Cliente">
+        <div className="alert alert-danger">{erro || 'Cliente não encontrado.'}</div>
+      </Shell>
     );
   }
 
   const numeroWhats = cliente.whatsapp || cliente.telefone;
 
   return (
-    <div className="app-shell">
-      <TopBar title={cliente.nomeFantasia || cliente.razaoSocial || 'Cliente'} back />
-      <main className="app-main">
-        {criadoAgora ? <div className="alert alert-success">Cliente cadastrado com sucesso!</div> : null}
-        {erro ? <div className="alert alert-danger">{erro}</div> : null}
+    <Shell embedded={embedded} title={cliente.nomeFantasia || cliente.razaoSocial || 'Cliente'}>
+      {criadoAgora ? <div className="alert alert-success">Cliente cadastrado com sucesso!</div> : null}
+      {erro ? <div className="alert alert-danger">{erro}</div> : null}
 
         <div className="card">
           <strong>{cliente.razaoSocial}</strong>
@@ -308,7 +333,6 @@ export function ClientDetailPage() {
             {enviandoInteracao ? 'Registrando…' : 'Registrar interação'}
           </Button>
         </form>
-      </main>
-    </div>
+    </Shell>
   );
 }
