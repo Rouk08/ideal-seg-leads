@@ -3,10 +3,10 @@
 App web (PWA) mobile-first para vendedores externos cadastrarem clientes
 prospectados em campo, mesmo offline, com isolamento de dados por vendedor.
 
-> **Status**: em construção, por etapas. Esta versão do README cobre o que já
-> existe até agora: **schema do banco + auth + convites + CRUD de cliente +
-> formulário mobile do vendedor + offline (IndexedDB + fila de
-> sincronização)**. O dashboard de supervisor/admin é a próxima etapa.
+> **Status**: v1 completa — todas as 6 etapas combinadas foram implementadas:
+> schema do banco, auth + convites, CRUD de cliente com anti-duplicidade,
+> formulário mobile do vendedor, offline (IndexedDB + fila de sincronização)
+> e dashboard de supervisor/admin.
 
 ## Stack
 
@@ -197,6 +197,12 @@ funcionando).
 | GET | `/api/external/cep/:cep` | autenticado | proxy BrasilAPI — preenchimento automático |
 | GET | `/api/clients/:clienteId/interacoes` | autenticado, isolado | histórico de interações do cliente |
 | POST | `/api/clients/:clienteId/interacoes` | autenticado, isolado | registra interação — **renova a reserva de carteira** |
+| GET | `/api/clients/export` | autenticado, isolado | exporta CSV (mesmos filtros da listagem, sem paginação) |
+| GET | `/api/users` | SUPERVISOR/ADMIN | lista usuários — filtros `perfil`, `ativo` |
+| PATCH | `/api/users/:id` | ADMIN | edita nome/perfil/ativo/meta/comissão de um usuário |
+| GET | `/api/settings` | SUPERVISOR/ADMIN | lê os parâmetros do sistema |
+| PATCH | `/api/settings` | ADMIN | altera `diasReservaCarteira` |
+| GET | `/api/dashboard/stats` | SUPERVISOR/ADMIN | cadastros por vendedor, funil consolidado, taxa de conversão, ranking |
 
 ## Decisões de segurança desta etapa
 
@@ -367,6 +373,49 @@ funcionando).
   `Date.now`) deixa essas transações penduradas pra sempre. Trocado por
   `vi.spyOn(Date, 'now')`, que não toca nos timers.
 
+## Decisões desta etapa (dashboard supervisor/admin)
+
+- **Roteamento por perfil, não por escolha do usuário**: `VENDEDOR` sempre
+  cai na Home mobile (`/`); `SUPERVISOR`/`ADMIN` são redirecionados direto
+  pra `/admin` (dashboard desktop) — são públicos diferentes, com telas
+  desenhadas pra tamanhos de tela diferentes, então não faz sentido os dois
+  perfis disputarem a mesma rota inicial. Rotas de cliente mobile
+  (`/clientes`, `/clientes/novo`) ficam restritas a `VENDEDOR`.
+- **Agregação em memória, não SQL** (`dashboard.service.ts`): no volume
+  desta fase (uma equipe de vendedores, não milhares de registros) um
+  `findMany` + `reduce` em JS é rápido o bastante e muito mais fácil de
+  ajustar do que um `groupBy` do Prisma. Fica marcado como candidato a
+  otimização se o volume crescer bastante.
+- **Exportação reaproveita o isolamento do `list()`**: `clients.repository.findAll`
+  usa a mesma função `buildWhere` que a listagem — um vendedor exportando
+  só recebe os próprios clientes, sem nenhum código novo de isolamento pra
+  manter em sincronia (testado explicitamente: `admin.test.ts`).
+- **Download de arquivo autenticado via Blob**, não um `<a href>` puro — um
+  link direto pra `/api/clients/export` não manda o header `Authorization`
+  (o access token só existe em memória, de propósito). `api.download()`
+  reaproveita o mesmo fluxo de retry-on-401 do resto do client, devolve um
+  `Blob` + nome de arquivo (do `Content-Disposition`), e só então dispara o
+  `<a download>`.
+- **Gestão de usuários**: `SUPERVISOR` lista (precisa ver vendedores pra
+  reatribuir carteira), só `ADMIN` edita — perfil, ativo/inativo, meta e
+  comissão são dados sensíveis o bastante pra ficar restritos. Desativar um
+  vendedor bloqueia o login dele mas nunca apaga os clientes (regra de
+  negócio #7) — não existe nenhum cascade de exclusão de `Usuario` pra
+  `Cliente` no schema, então isso já vem garantido pela própria modelagem.
+- **CSV com BOM UTF-8** — sem ele o Excel abre acentuação quebrada
+  (`Ç`, `ã` etc. viram lixo) mesmo o arquivo estando em UTF-8 de verdade.
+
+Verificado ponta a ponta num navegador real, logado como cada perfil: login
+como supervisor cai direto no dashboard com números batendo com os dados
+reais do seed; convite gerado, aceito por uma aba separada, o novo vendedor
+aparece na lista; edição de meta/comissão persistida no Postgres; reserva de
+carteira reatribuída de um vendedor pro outro (com o dropdown atualizando
+sozinho pra não reoferecer o vendedor atual); exportação CSV com o filtro
+aplicado batendo exatamente com os dados esperados; parâmetro de dias de
+reserva alterado e persistido. Dados de teste (segundo vendedor, convite,
+reatribuição, parâmetro alterado) revertidos depois, mantendo o seed
+documentado neste README.
+
 ## Próximas etapas (ordem combinada)
 
 1. ~~Auth e convites~~ ✅
@@ -374,4 +423,9 @@ funcionando).
 3. ~~CRUD de cliente com anti-duplicidade e isolamento por vendedor~~ ✅
 4. ~~Formulário mobile em etapas~~ ✅
 5. ~~Offline (IndexedDB + fila de sincronização)~~ ✅
-6. Dashboard supervisor/admin
+6. ~~Dashboard supervisor/admin~~ ✅
+
+Todas as etapas combinadas foram entregues. Possíveis próximos passos, fora
+do escopo combinado original (ver seção "Fora do escopo da v1" do briefing):
+proposta em PDF, cálculo/fechamento de comissão, integração com o gerador
+de contratos, emissão de boleto, WhatsApp API.

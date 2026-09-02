@@ -104,10 +104,40 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
   return body as T;
 }
 
+interface DownloadResult {
+  blob: Blob;
+  filename: string;
+}
+
+/** Pra endpoints que devolvem um arquivo (ex.: export CSV), não JSON — usa
+ * o mesmo access token/retry-on-401 de `request()`, mas devolve um Blob em
+ * vez de tentar fazer JSON.parse. */
+async function download(path: string, query: RequestOptions['query'], fallbackFilename: string, isRetry = false): Promise<DownloadResult> {
+  const res = await doFetch(path, { method: 'GET', query });
+
+  if (res.status === 401 && !isRetry) {
+    const refreshed = await tryRefresh();
+    if (refreshed) return download(path, query, fallbackFilename, true);
+    setAccessToken(null);
+    throw new SessionExpiredError();
+  }
+
+  if (!res.ok) {
+    const body = await parseBody(res);
+    const message = (body as { error?: string } | undefined)?.error ?? `Erro ${res.status}`;
+    throw new ApiError(res.status, message);
+  }
+
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  return { blob: await res.blob(), filename: match?.[1] ?? fallbackFilename };
+}
+
 export const api = {
   get: <T>(path: string, query?: RequestOptions['query']) => request<T>(path, { method: 'GET', query }),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
   postForm: <T>(path: string, formData: FormData) => request<T>(path, { method: 'POST', body: formData, isFormData: true }),
+  download: (path: string, query: RequestOptions['query'], fallbackFilename: string) => download(path, query, fallbackFilename),
 };

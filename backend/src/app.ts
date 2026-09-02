@@ -8,6 +8,9 @@ import { authRouter } from './modules/auth/auth.routes';
 import { invitesRouter } from './modules/invites/invites.routes';
 import { clientsRouter } from './modules/clients/clients.routes';
 import { externalRouter } from './modules/external/external.routes';
+import { usersRouter } from './modules/users/users.routes';
+import { settingsRouter } from './modules/settings/settings.routes';
+import { dashboardRouter } from './modules/dashboard/dashboard.routes';
 
 export function createApp() {
   const app = express();
@@ -30,9 +33,9 @@ export function createApp() {
   app.use('/api/invites', invitesRouter);
   app.use('/api/clients', clientsRouter);
   app.use('/api/external', externalRouter);
-
-  // Demais módulos (interactions, sync, dashboard, export, settings) entram
-  // aqui nas próximas etapas.
+  app.use('/api/users', usersRouter);
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/dashboard', dashboardRouter);
 
   app.use(errorHandler);
 

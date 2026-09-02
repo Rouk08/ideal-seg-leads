@@ -21,18 +21,23 @@ function scopeFor(user: AuthUser): Prisma.ClienteWhereInput {
   return {}; // SUPERVISOR e ADMIN enxergam tudo
 }
 
-export interface ListFilters {
+export interface BaseFilters {
   etapaFunil?: Prisma.ClienteWhereInput['etapaFunil'];
   cidade?: string;
   servico?: string;
   vendedorId?: string;
   busca?: string;
+  dataInicio?: string;
+  dataFim?: string;
+}
+
+export interface ListFilters extends BaseFilters {
   page: number;
   pageSize: number;
 }
 
-export async function list(user: AuthUser, filters: ListFilters) {
-  const where: Prisma.ClienteWhereInput = {
+function buildWhere(user: AuthUser, filters: BaseFilters): Prisma.ClienteWhereInput {
+  return {
     ...scopeFor(user),
     ...(filters.etapaFunil ? { etapaFunil: filters.etapaFunil } : {}),
     ...(filters.cidade ? { cidade: { equals: filters.cidade, mode: 'insensitive' } } : {}),
@@ -51,7 +56,19 @@ export async function list(user: AuthUser, filters: ListFilters) {
           ],
         }
       : {}),
+    ...(filters.dataInicio || filters.dataFim
+      ? {
+          dataCadastro: {
+            ...(filters.dataInicio ? { gte: new Date(`${filters.dataInicio}T00:00:00.000Z`) } : {}),
+            ...(filters.dataFim ? { lte: new Date(`${filters.dataFim}T23:59:59.999Z`) } : {}),
+          },
+        }
+      : {}),
   };
+}
+
+export async function list(user: AuthUser, filters: ListFilters) {
+  const where = buildWhere(user, filters);
 
   const [items, total] = await Promise.all([
     prisma.cliente.findMany({
@@ -65,6 +82,15 @@ export async function list(user: AuthUser, filters: ListFilters) {
   ]);
 
   return { items, total, page: filters.page, pageSize: filters.pageSize };
+}
+
+/** Mesmo escopo/filtros do list(), sem paginação — usado só pela exportação. */
+export async function findAll(user: AuthUser, filters: BaseFilters) {
+  return prisma.cliente.findMany({
+    where: buildWhere(user, filters),
+    orderBy: { dataCadastro: 'desc' },
+    include: { vendedor: { select: { id: true, nome: true } } },
+  });
 }
 
 /** Retorna null tanto se o cliente não existe quanto se existe mas é de outro

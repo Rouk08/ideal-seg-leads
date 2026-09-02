@@ -129,3 +129,57 @@ export interface Interacao {
   proximoPasso?: string | null;
   dataProximoPasso?: string | null;
 }
+
+export interface UsuarioAdmin {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: Perfil;
+  ativo: boolean;
+  metaMensal?: string | null;
+  percentualComissao?: string | null;
+  createdAt: string;
+}
+
+export type InviteStatus = 'PENDENTE' | 'USADO' | 'EXPIRADO' | 'REVOGADO';
+
+export const INVITE_STATUS_LABEL: Record<InviteStatus, string> = {
+  PENDENTE: 'Pendente',
+  USADO: 'Usado',
+  EXPIRADO: 'Expirado',
+  REVOGADO: 'Revogado',
+};
+
+export interface Invite {
+  id: string;
+  email: string;
+  nome?: string | null;
+  perfil: Perfil;
+  status: InviteStatus;
+  expiresAt: string;
+  usedAt?: string | null;
+  createdAt: string;
+  criadoPor?: { nome: string };
+}
+
+export interface DashboardStats {
+  totalClientes: number;
+  cadastrosNoMes: number;
+  porEtapa: Partial<Record<EtapaFunil, number>>;
+  taxaConversaoGeral: number | null;
+  porVendedor: Array<{
+    vendedorId: string;
+    vendedorNome: string;
+    ativo: boolean;
+    total: number;
+    ganho: number;
+    perdido: number;
+    taxaConversao: number | null;
+  }>;
+  ranking: DashboardStats['porVendedor'];
+}
+
+export interface Settings {
+  id: string;
+  diasReservaCarteira: number;
+}

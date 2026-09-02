@@ -73,9 +73,16 @@ export const listClientsQuerySchema = z.object({
   servico: z.nativeEnum(ServicoInteresse).optional(),
   vendedorId: z.string().uuid().optional(), // só tem efeito pra supervisor/admin — vendedor sempre vê só o próprio
   busca: z.string().trim().optional(), // razão social / nome fantasia / cnpj-cpf
+  dataInicio: z.string().date().optional(), // filtro por período de cadastro (YYYY-MM-DD)
+  dataFim: z.string().date().optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(20),
 });
+
+// Mesmos filtros da listagem, sem paginação — a exportação sai inteira.
+export const exportClientsQuerySchema = listClientsQuerySchema
+  .omit({ page: true, pageSize: true })
+  .strict();
 
 export const checkDuplicateQuerySchema = z.object({
   cnpjCpf: z.string().min(11),

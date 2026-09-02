@@ -13,6 +13,11 @@ clientsRouter.use(requireAuth);
 // Checagem de duplicidade ANTES de criar — usada pelo formulário em tempo real.
 clientsRouter.get('/check-duplicate', clientsController.checkDuplicate);
 
+// Precisa vir antes de '/:id' — senão "export" seria interpretado como um id.
+// Mesmo isolamento do list() (buildWhere compartilhado): um vendedor só
+// exporta os próprios clientes, nunca os de outro (critério de aceite).
+clientsRouter.get('/export', clientsController.exportCsv);
+
 clientsRouter.post('/', clientsController.create);
 clientsRouter.get('/', clientsController.list);
 clientsRouter.get('/:id', clientsController.get);

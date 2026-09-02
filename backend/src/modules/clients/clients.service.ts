@@ -13,6 +13,60 @@ function formatDataCadastro(date: Date): string {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(date);
 }
 
+function csvCell(value: unknown): string {
+  const str = value === null || value === undefined ? '' : String(value);
+  // aspas duplas em volta de qualquer célula que tenha vírgula, aspas ou
+  // quebra de linha — regra padrão de CSV (RFC 4180), abre no Excel sem drama
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+const CSV_COLUNAS = [
+  'Razão Social',
+  'Nome Fantasia',
+  'CNPJ/CPF',
+  'Cidade',
+  'UF',
+  'Telefone',
+  'E-mail',
+  'Serviços de Interesse',
+  'Etapa do Funil',
+  'Vendedor',
+  'Data de Cadastro',
+  'Valor Estimado Mensal',
+] as const;
+
+/** Reaproveita clientsRepo.findAll — mesmo escopo/isolamento do list().
+ * Um vendedor exportando só recebe os próprios clientes, igual na listagem
+ * (é o mesmo `buildWhere` por trás dos dois). */
+export async function exportCsv(user: AuthUser, filters: Parameters<typeof clientsRepo.findAll>[1]): Promise<string> {
+  const clientes = await clientsRepo.findAll(user, filters);
+
+  const linhas = clientes.map((c) =>
+    [
+      c.razaoSocial,
+      c.nomeFantasia,
+      c.cnpjCpf,
+      c.cidade,
+      c.uf,
+      c.telefone,
+      c.email,
+      c.servicosInteresse.join('; '),
+      c.etapaFunil,
+      c.vendedor.nome,
+      formatDataCadastro(c.dataCadastro),
+      c.valorEstimadoMensal ?? '',
+    ]
+      .map(csvCell)
+      .join(','),
+  );
+
+  // BOM UTF-8 no início — sem isso o Excel abre acentuação quebrada.
+  return '﻿' + [CSV_COLUNAS.join(','), ...linhas].join('\r\n');
+}
+
 function validateDocOrThrow(cnpjCpf: string, tipoPessoa: 'PF' | 'PJ') {
   if (!isValidCpfCnpj(cnpjCpf, tipoPessoa)) {
     throw new HttpError(400, tipoPessoa === 'PF' ? 'CPF inválido' : 'CNPJ inválido');

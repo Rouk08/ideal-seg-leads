@@ -4,6 +4,7 @@ import {
   updateClientSchema,
   reassignSchema,
   listClientsQuerySchema,
+  exportClientsQuerySchema,
   checkDuplicateQuerySchema,
 } from './clients.validators';
 import * as clientsService from './clients.service';
@@ -23,6 +24,14 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
   const query = listClientsQuerySchema.parse(req.query);
   const result = await clientsService.list(authUser(req), query);
   res.json(result);
+});
+
+export const exportCsv = asyncHandler(async (req: Request, res: Response) => {
+  const query = exportClientsQuerySchema.parse(req.query);
+  const csv = await clientsService.exportCsv(authUser(req), query);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="clientes-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send(csv);
 });
 
 export const checkDuplicate = asyncHandler(async (req: Request, res: Response) => {

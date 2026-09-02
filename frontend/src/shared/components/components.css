@@ -278,3 +278,116 @@
   font-size: 13px;
   color: var(--color-text-muted);
 }
+
+/* ---------------------------------------------------------------------
+   Telas de supervisor/admin — desktop-first (o oposto do resto do app).
+   --------------------------------------------------------------------- */
+
+.admin-shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: 56px;
+  padding: 0 var(--space-5);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.admin-topbar .brand {
+  font-weight: 700;
+  margin-right: auto;
+}
+
+.admin-topbar nav {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.admin-topbar nav a {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+}
+
+.admin-topbar nav a.active {
+  color: var(--color-text-inverse);
+  border-bottom-color: var(--color-accent);
+}
+
+.admin-main {
+  flex: 1;
+  padding: var(--space-5);
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.data-table-wrap {
+  overflow-x: auto; /* nunca deixa a tabela estourar a largura da página */
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background: var(--color-primary-light);
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+  margin-bottom: var(--space-4);
+}
+
+.filter-bar .field {
+  margin-bottom: 0;
+  min-width: 160px;
+}
+
+.inline-form {
+  display: flex;
+  gap: var(--space-3);
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.inline-form .field {
+  margin-bottom: 0;
+}
